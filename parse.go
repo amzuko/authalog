@@ -123,6 +123,10 @@ func (db *database) intern(str string) int64 {
 	return db.interned[str]
 }
 
+func (db *database) lookup(v int64) string {
+	return db.internedLookup[v]
+}
+
 func (s scanner) scanTerm() (t Term, err error) {
 
 	id, err := s.scanIdentifier()

@@ -10,6 +10,7 @@ Static errors
     Negation inside recursion
 Docstring comments on rules
 Web UI for interacting with db
+Pass errors up through querying
 
 Concurrent use of database
     Locks in interning

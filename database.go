@@ -13,7 +13,9 @@ import (
 
 type database struct {
 	// Map id to Clause
-	Clauses map[uuid.UUID]Clause
+	clauses map[uuid.UUID]Clause
+	// Unindexed external rules
+	externalRelations []externalRelation
 	// Map Literal id to proof
 	proofs map[uuid.UUID][]proof
 	// Map goal hash to results
@@ -28,7 +30,7 @@ type database struct {
 
 func newDatabase() *database {
 	d := database{
-		Clauses:        map[uuid.UUID]Clause{},
+		clauses:        map[uuid.UUID]Clause{},
 		proofs:         map[uuid.UUID][]proof{},
 		results:        map[uuid.UUID][]result{},
 		vars:           0,
@@ -738,8 +740,15 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 		return
 	}
 
+	// Check external relations
+	for _, r := range g.db.externalRelations {
+		if ok, _ := unify(sg.Literal, r.head, emptyEnvironment()); ok {
+			g.runExternalRule(sg, r)
+		}
+	}
+
 	// Check Clauses
-	for cid, c := range g.db.Clauses {
+	for cid, c := range g.db.clauses {
 		// If it's a fact
 		if len(c.Body) == 0 {
 			if ok, env := unify(sg.Literal, c.Head, emptyEnvironment()); ok {
@@ -824,7 +833,7 @@ func (db *database) ask(l Literal) []result {
 func (db *database) assert(c Clause) {
 	fresh, _ := freshen(c, &db.vars)
 	id := fresh.id()
-	db.Clauses[id] = fresh
+	db.clauses[id] = fresh
 }
 
 // l must have been asked directly or returned from a previous ask of the database
@@ -857,7 +866,7 @@ func (db *database) ProofString(l Literal) string {
 		// Work with the first proof, and only the first proof
 		p := ps[0]
 
-		c := db.Clauses[p.Clause]
+		c := db.clauses[p.Clause]
 		substituted := p.substitutions.rewriteClause(c)
 		db.writeClause(result, &substituted, Assert)
 		if len(substituted.Body) > 0 {
