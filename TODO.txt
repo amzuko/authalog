@@ -1,0 +1,18 @@
+Store subgoal failure in results / proofs somehow?
+Index clauses
+Primitive functions + bindings to sql example
+Explanation formatting strings
+RBAC example
+Cache invalidation -- HOW?
+Static errors
+    Track parse position
+    Feed back along with errors
+    Negation inside recursion
+Docstring comments on rules
+Web UI for interacting with db
+
+Concurrent use of database
+    Locks in interning
+    Locks on results
+    Locks around invalidation
+    Snapshots for consistent querying?
