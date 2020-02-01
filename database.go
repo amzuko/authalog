@@ -11,11 +11,11 @@ import (
 	"github.com/spaolacci/murmur3"
 )
 
-type database struct {
+type Database struct {
 	// Map id to Clause
 	clauses map[uuid.UUID]Clause
 	// Unindexed external rules
-	externalRelations []externalRelation
+	externalRelations []ExternalRelation
 	// Map Literal id to proof
 	proofs map[uuid.UUID][]proof
 	// Map goal hash to results
@@ -28,14 +28,15 @@ type database struct {
 	internedLookup map[int64]string
 }
 
-func newDatabase() *database {
-	d := database{
-		clauses:        map[uuid.UUID]Clause{},
-		proofs:         map[uuid.UUID][]proof{},
-		results:        map[uuid.UUID][]result{},
-		vars:           0,
-		interned:       map[string]int64{},
-		internedLookup: map[int64]string{},
+func NewDatabase(ExternalRelations []ExternalRelation) *Database {
+	d := Database{
+		clauses:           map[uuid.UUID]Clause{},
+		externalRelations: ExternalRelations,
+		proofs:            map[uuid.UUID][]proof{},
+		results:           map[uuid.UUID][]result{},
+		vars:              0,
+		interned:          map[string]int64{},
+		internedLookup:    map[int64]string{},
 	}
 	return &d
 }
@@ -161,7 +162,7 @@ func unify(a Literal, b Literal, in environment) (bool, environment) {
 }
 
 type goal struct {
-	db       *database
+	db       *Database
 	varCount int64 // Used to freshen/rename variables
 	l        Literal
 	// Subgoals are particular literals that need to be derived. They may be derived by any
@@ -648,6 +649,7 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 }
 
 func (g *goal) mergeResultIntoSubgoal(sg *subgoal, r result) {
+	trace("Merging", r.Literal, "into", sg.Literal)
 	if _, ok := sg.results[r.Literal.id()]; !ok {
 		// Store the result so that we can extract results and proof later
 		sg.results[r.Literal.id()] = r
@@ -727,13 +729,14 @@ func (g *goal) visitChain(chainId uuid.UUID) {
 
 func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	sg := g.subgoals[subgoal]
-
+	trace("visiting", sg.Literal)
 	if sg.Literal.Negated {
 		panic(fmt.Sprintf("Visiting negated subgoal: %v. All subgoals should be in positive form.", sg.Literal))
 	}
 	// Check whether or not the database has attempted this subgoal.
 	// TODO: we should be able to store failure as well?
 	if results, ok := g.db.results[sg.Literal.id()]; ok {
+		trace("Found results")
 		for _, r := range results {
 			g.mergeResultIntoSubgoal(sg, r)
 		}
@@ -743,6 +746,8 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	// Check external relations
 	for _, r := range g.db.externalRelations {
 		if ok, _ := unify(sg.Literal, r.head, emptyEnvironment()); ok {
+			trace("matched external", r.head)
+
 			g.runExternalRule(sg, r)
 		}
 	}
@@ -794,7 +799,7 @@ func emptyEnvironment() environment {
 	}
 }
 
-func (db *database) ask(l Literal) []result {
+func (db *Database) ask(l Literal) []result {
 	// Initialize
 	goal := goal{
 		db:       db,
@@ -830,20 +835,20 @@ func (db *database) ask(l Literal) []result {
 	return results
 }
 
-func (db *database) assert(c Clause) {
+func (db *Database) assert(c Clause) {
 	fresh, _ := freshen(c, &db.vars)
 	id := fresh.id()
 	db.clauses[id] = fresh
 }
 
 // l must have been asked directly or returned from a previous ask of the database
-func (db *database) ProofOf(l Literal) ([]proof, bool) {
+func (db *Database) ProofOf(l Literal) ([]proof, bool) {
 	id := l.id()
 	ps, ok := db.proofs[id]
 	return ps, ok
 }
 
-func (db *database) ProofString(l Literal) string {
+func (db *Database) ProofString(l Literal) string {
 	result := bytes.NewBufferString("")
 
 	prooved := map[uuid.UUID]struct{}{}

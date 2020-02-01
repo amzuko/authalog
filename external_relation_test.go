@@ -13,7 +13,7 @@ func c(i interner, s string) Term {
 	}
 }
 
-var testRelation = externalRelation{
+var testRelation = ExternalRelation{
 	head: Literal{
 		Predicate: "external",
 		Terms: []Term{
@@ -47,8 +47,8 @@ var testRelation = externalRelation{
 }
 
 func TestExternalRule(t *testing.T) {
-	db := newDatabase()
-	db.externalRelations = append(db.externalRelations, testRelation)
+	db := NewDatabase([]ExternalRelation{})
+	db.ExternalRelations = append(db.ExternalRelations, testRelation)
 	cmds, err := db.Parse(strings.NewReader(`
 	foo(a).
 	foo(b).

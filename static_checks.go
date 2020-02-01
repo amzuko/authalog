@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-func (db *database) checkClause(c Clause) error {
+func (db *Database) checkClause(c Clause) error {
 	if c.Head.Negated {
 		return fmt.Errorf("Clause heads cannot be negated")
 	}
@@ -39,7 +39,7 @@ func (db *database) checkClause(c Clause) error {
 		if _, ok := bodyPositiveVariables[k]; ok {
 			continue
 		}
-		return fmt.Errorf("variable '%v' bound in clause head, but not in body. All variables in clause heads must also be bound in their bodies", db.termString(Term{Value: k}))
+		return fmt.Errorf("variable \"%v\" bound in clause head, but not in body. All variables in clause heads must also be bound in their bodies", db.termString(Term{Value: k}))
 	}
 
 	// Make sure all variables in negated literals are bound in positive ones.

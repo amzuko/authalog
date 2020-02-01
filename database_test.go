@@ -8,7 +8,7 @@ import (
 )
 
 func parseApplyExecute(t *testing.T, prog string) string {
-	db := newDatabase()
+	db := NewDatabase([]ExternalRelation{})
 	cmds, err := db.Parse(strings.NewReader(prog))
 	if err != nil {
 		t.Errorf("Error parsing: %s", err)
@@ -206,7 +206,7 @@ func TestProofStruct(t *testing.T) {
 		t.Error("Wrong case")
 	}
 
-	db := newDatabase()
+	db := NewDatabase([]ExternalRelation{})
 	cmds, err := db.Parse(strings.NewReader(c.prog))
 	if err != nil {
 		t.Errorf("Error parsing: %s", err)

@@ -11,6 +11,8 @@ Static errors
 Docstring comments on rules
 Web UI for interacting with db
 Pass errors up through querying
+External sql relations 
+    verify that types match 
 
 Concurrent use of database
     Locks in interning

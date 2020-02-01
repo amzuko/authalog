@@ -7,7 +7,7 @@ type interner interface {
 	lookup(value int64) string
 }
 
-type externalRelation struct {
+type ExternalRelation struct {
 	head Literal
 	// External relations are responsible for correctly implementing several things:
 	// 	1. All possible variable/ground combinations for input terms
@@ -18,7 +18,7 @@ type externalRelation struct {
 	run func(interner, []Term) ([][]Term, error)
 }
 
-func (g *goal) runExternalRule(sg *subgoal, rel externalRelation) {
+func (g *goal) runExternalRule(sg *subgoal, rel ExternalRelation) {
 	tuples, err := rel.run(g.db, sg.Literal.Terms)
 	if err != nil {
 		panic(fmt.Sprintf("got error: %v", err))
@@ -35,6 +35,8 @@ func (g *goal) runExternalRule(sg *subgoal, rel externalRelation) {
 				Literal: r,
 				// TODO: proof? invalidators?
 			})
+		} else {
+			trace("Did not unify", r, "into", sg.Literal)
 		}
 	}
 }

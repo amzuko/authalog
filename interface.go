@@ -9,7 +9,6 @@ import (
 // Term contains either a variable or a constant.
 type Term struct {
 	IsConstant bool
-	IsAtom     bool
 	// If term is a constant, value is the constant value.
 	// If term is not a constant (ie, is a variable), value contains
 	// the variable's id.
@@ -37,7 +36,7 @@ type DatalogCommand struct {
 }
 
 // Parse consumes a reader, producing a slice of datalogCommands.
-func (db *database) Parse(input io.Reader) ([]DatalogCommand, error) {
+func (db *Database) Parse(input io.Reader) ([]DatalogCommand, error) {
 	s := newScanner(input, db)
 
 	commands := make([]DatalogCommand, 0)
@@ -51,8 +50,17 @@ func (db *database) Parse(input io.Reader) ([]DatalogCommand, error) {
 	}
 }
 
+func (db *Database) ParseCommandOrPanic(str string) DatalogCommand {
+	s := newScanner(strings.NewReader(str), db)
+	c, _, err := s.scanOneCommand()
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
 // Apply applies a single command.
-func Apply(cmd DatalogCommand, db *database) ([]result, error) {
+func Apply(cmd DatalogCommand, db *Database) ([]result, error) {
 	switch cmd.CommandType {
 	case Assert:
 		c := Clause{
@@ -77,7 +85,7 @@ func Apply(cmd DatalogCommand, db *database) ([]result, error) {
 
 // ToString reformats results for display.
 // Coincidentally, it also generates valid datalog.
-func (db *database) ToString(results []result) string {
+func (db *Database) ToString(results []result) string {
 	str := ""
 	for _, result := range results {
 		str += result.Literal.Predicate

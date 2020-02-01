@@ -4,17 +4,16 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
 type scanner struct {
 	r  *bufio.Reader
-	db *database
+	db *Database
 }
 
-func newScanner(input io.Reader, db *database) scanner {
+func newScanner(input io.Reader, db *Database) scanner {
 	return scanner{bufio.NewReader(input), db}
 }
 
@@ -36,6 +35,10 @@ func isNumber(ch rune) bool {
 
 func isLetter(ch rune) bool {
 	return isLowerCase(ch) || isUpperCase(ch)
+}
+
+func isSingleQuote(ch rune) bool {
+	return ch == '\''
 }
 
 func isTerminal(ch rune) bool {
@@ -97,25 +100,31 @@ func (s scanner) consumeWhitespace() {
 	}
 }
 
-func (s scanner) scanIdentifier() (str string, err error) {
+func (s scanner) scanIdentifier() (str string, isAtom bool, err error) {
 	s.consumeWhitespace()
 	ch, _, err := s.r.ReadRune()
-	if !isLetter(ch) && !isNumber(ch) {
-		return str, fmt.Errorf("Expected a term startign with a letter or number, but got %v", string(ch))
+	if !isLetter(ch) && !isNumber(ch) && !isSingleQuote(ch) {
+		return str, false, fmt.Errorf("Expected a term startign with a letter or number, but got %v", string(ch))
 	}
-	str = str + string(ch)
+	if !isSingleQuote(ch) {
+		str = str + string(ch)
+	} else {
+		isAtom = true
+	}
 	for {
 		ch, _, err = s.r.ReadRune()
 
 		if !isAllowedBodyRune(ch) {
-			s.r.UnreadRune()
+			if !isSingleQuote(ch) {
+				s.r.UnreadRune()
+			}
 			return
 		}
 		str = str + string(ch)
 	}
 }
 
-func (db *database) intern(str string) int64 {
+func (db *Database) intern(str string) int64 {
 	if _, ok := db.interned[str]; !ok {
 		db.interned[str] = int64(len(db.interned))
 		db.internedLookup[db.interned[str]] = str
@@ -123,30 +132,22 @@ func (db *database) intern(str string) int64 {
 	return db.interned[str]
 }
 
-func (db *database) lookup(v int64) string {
+func (db *Database) lookup(v int64) string {
 	return db.internedLookup[v]
 }
 
 func (s scanner) scanTerm() (t Term, err error) {
 
-	id, err := s.scanIdentifier()
+	id, isAtom, err := s.scanIdentifier()
 
 	if err != nil {
 		return t, err
 	}
 
 	leading, _ := utf8.DecodeRuneInString(id)
-	if !isUpperCase(leading) && isNumber(leading) {
-		// It's gotta be a number
-		t.Value, err = strconv.ParseInt(id, 10, 32)
-
-		t.IsConstant = true
-		return
-	}
 
 	t.Value = s.db.intern(id)
-	t.IsAtom = true
-	if !isUpperCase(leading) {
+	if !isUpperCase(leading) || isAtom {
 		t.IsConstant = true
 	}
 	return
@@ -165,7 +166,7 @@ func (s scanner) scanLiteral() (lit Literal, err error) {
 		s.r.UnreadRune()
 	}
 
-	name, err := s.scanIdentifier()
+	name, _, err := s.scanIdentifier()
 	if err != nil {
 		return
 	}
@@ -286,22 +287,18 @@ func (s scanner) scanOneCommand() (DatalogCommand, bool, error) {
 }
 
 // TODO: UUUID
-func (db *database) termString(t Term) string {
-	// TODO what about constant strings?
-	if t.IsConstant && !t.IsAtom {
-		return fmt.Sprint(t.Value)
-	} else {
-		if interned, ok := db.internedLookup[t.Value]; ok {
-			return interned
-		}
-		return fmt.Sprintf("Unknown:%v", t.Value)
+func (db *Database) termString(t Term) string {
+	if interned, ok := db.internedLookup[t.Value]; ok {
+		// TODO: if we start with a number or a lowercase letter, we don't need quotes
+		return "'" + interned + "'"
 	}
+	return fmt.Sprintf("Unknown:%v", t.Value)
 }
 
 // Should we instead write commands back to disk,
 // and focus on providing utility methods to convert Clauses back to commands?
 // TODO:consider this.
-func (db *database) writeLiteral(w io.Writer, l *Literal) error {
+func (db *Database) writeLiteral(w io.Writer, l *Literal) error {
 	_, err := io.WriteString(w, l.Predicate)
 	if err != nil {
 		return err
@@ -328,7 +325,7 @@ func (db *database) writeLiteral(w io.Writer, l *Literal) error {
 	return nil
 }
 
-func (db *database) writeClause(w io.Writer, c *Clause, t CommandType) error {
+func (db *Database) writeClause(w io.Writer, c *Clause, t CommandType) error {
 	err := db.writeLiteral(w, &c.Head)
 	if err != nil {
 		return err
