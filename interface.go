@@ -8,6 +8,8 @@ import (
 
 // Term contains either a variable or a constant.
 type Term struct {
+	// TODO: we could bitpack this into the top bit of the int64 part.
+	// 2^63 is still plenty of symbols
 	IsConstant bool
 	// If term is a constant, value is the constant value.
 	// If term is not a constant (ie, is a variable), value contains
@@ -60,7 +62,7 @@ func (db *Database) ParseCommandOrPanic(str string) DatalogCommand {
 }
 
 // Apply applies a single command.
-func Apply(cmd DatalogCommand, db *Database) ([]result, error) {
+func (db *Database) Apply(cmd DatalogCommand) ([]result, error) {
 	switch cmd.CommandType {
 	case Assert:
 		c := Clause{

@@ -16,7 +16,7 @@ func parseApplyExecute(t *testing.T, prog string) string {
 	}
 	var results []result
 	for _, c := range cmds {
-		results, err = Apply(c, db)
+		results, err = db.Apply(c)
 		if err != nil {
 			t.Error(err)
 			t.Fail()
@@ -214,7 +214,7 @@ func TestProofStruct(t *testing.T) {
 	}
 	var results []result
 	for _, c := range cmds {
-		results, err = Apply(c, db)
+		results, err = db.Apply(c)
 		if err != nil {
 			t.Error(err)
 			t.Fail()

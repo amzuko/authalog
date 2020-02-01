@@ -55,9 +55,9 @@ func TestExternalSQLRule(t *testing.T) {
 	}
 
 	spec := SQLExternalRelationSpec{
-		table:   "users",
-		columns: []string{"id", "name"},
-		types:   []interface{}{0, ""},
+		Table:   "users",
+		Columns: []string{"id", "name"},
+		Types:   []interface{}{0, ""},
 	}
 
 	relation, err := CreateSQLExternalRelation(spec, db)
@@ -88,7 +88,6 @@ func TestExternalSQLRule(t *testing.T) {
 	qTerms := makeVars(2)
 	qTerms[0] = Term{
 		IsConstant: true,
-		IsAtom:     true,
 		Value:      mi.intern("2"),
 	}
 	terms, err = relation.run(&mi, qTerms)
@@ -109,12 +108,10 @@ func TestExternalSQLRule(t *testing.T) {
 
 	qTerms[0] = Term{
 		IsConstant: true,
-		IsAtom:     true,
 		Value:      mi.intern("2"),
 	}
 	qTerms[1] = Term{
 		IsConstant: true,
-		IsAtom:     true,
 		Value:      mi.intern("Quincy"),
 	}
 	terms, err = relation.run(&mi, qTerms)

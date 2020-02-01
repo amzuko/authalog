@@ -289,8 +289,13 @@ func (s scanner) scanOneCommand() (DatalogCommand, bool, error) {
 // TODO: UUUID
 func (db *Database) termString(t Term) string {
 	if interned, ok := db.internedLookup[t.Value]; ok {
-		// TODO: if we start with a number or a lowercase letter, we don't need quotes
-		return "'" + interned + "'"
+		leading, _ := utf8.DecodeRuneInString(interned)
+		if isUpperCase(leading) {
+			// TODO: if we start with a number or a lowercase letter, we don't need quotes
+			return "'" + interned + "'"
+		} else {
+			return interned
+		}
 	}
 	return fmt.Sprintf("Unknown:%v", t.Value)
 }

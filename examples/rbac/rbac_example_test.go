@@ -2,11 +2,8 @@ package rbac
 
 import (
 	"database/sql"
-	"fmt"
 	"os"
 	"testing"
-
-	"github.com/amzuko/authalog"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -95,21 +92,12 @@ func TestRBAC(t *testing.T) {
 		t.Error(err)
 	}
 
-	c := rbac.db.ParseCommandOrPanic("users('2', Y)?")
-	r, err := authalog.Apply(c, rbac.db)
-	if err != nil {
-		t.Error(err)
-	}
-	fmt.Println(rbac.db.ToString(r))
-
 	assertTrue := truthy(t)
 	assertFalse := falsey(t)
 	// Is Quincy allowed to create posts?
-	rbac.CheckResourceType(2, Create, Post)
-	rbac.CheckResourceType(2, Create, Comment)
 	assertFalse(rbac.CheckResourceType(2, Create, Post))
 
-	// Is Quincy allowed to create posts?
+	// Is Quincy allowed to create comments?
 	assertTrue(rbac.CheckResourceType(2, Create, Comment))
 
 }

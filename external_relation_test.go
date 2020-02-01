@@ -8,7 +8,6 @@ import (
 func c(i interner, s string) Term {
 	return Term{
 		IsConstant: true,
-		IsAtom:     true,
 		Value:      i.intern(s),
 	}
 }
@@ -48,7 +47,7 @@ var testRelation = ExternalRelation{
 
 func TestExternalRule(t *testing.T) {
 	db := NewDatabase([]ExternalRelation{})
-	db.ExternalRelations = append(db.ExternalRelations, testRelation)
+	db.externalRelations = append(db.externalRelations, testRelation)
 	cmds, err := db.Parse(strings.NewReader(`
 	foo(a).
 	foo(b).
@@ -64,7 +63,7 @@ func TestExternalRule(t *testing.T) {
 	}
 	var results []result
 	for _, c := range cmds {
-		results, err = Apply(c, db)
+		results, err = db.Apply(c)
 		if err != nil {
 			t.Error(err)
 			t.Fail()

@@ -109,7 +109,7 @@ func NewRBACAuthorizer(db *sql.DB) (*RBACAuthorizer, error) {
 		return nil, err
 	}
 	for _, c := range commands {
-		_, err := authalog.Apply(c, rbac.db)
+		_, err := rbac.db.Apply(c)
 		if err != nil {
 			return nil, err
 		}
@@ -125,7 +125,7 @@ func (rbac *RBACAuthorizer) Check(user int, action Action, resource int) (bool, 
 	if err != nil {
 		return false, err
 	}
-	results, err := authalog.Apply(c[0], rbac.db)
+	results, err := rbac.db.Apply(c[0])
 	return len(results) != 0, err
 }
 
@@ -137,7 +137,7 @@ func (rbac *RBACAuthorizer) CheckResourceType(user int, action Action, resourceT
 	if err != nil {
 		return false, err
 	}
-	results, err := authalog.Apply(c[0], rbac.db)
+	results, err := rbac.db.Apply(c[0])
 	fmt.Println("Results", results)
 	return len(results) != 0, err
 }
