@@ -260,7 +260,10 @@ func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additi
 			dependents:   additionalDependents,
 			invalidators: invalidators,
 		}
-		c.invalidators[newBody[0].id()] = newBody[0]
+		// Make sure we store positive forms only in validators
+		i := newBody[0]
+		i.Negated = false
+		c.invalidators[newBody[0].id()] = i
 		g.chains[id] = &c
 	}
 
