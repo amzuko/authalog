@@ -553,6 +553,23 @@ func (g *goal) resultForDependentChain(sg *subgoal, r result, d dependent) resul
 func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) result {
 	dependentSubgoal := g.subgoals[d.recieverID]
 
+	newInvalidators := map[uuid.UUID]Literal{}
+	for k, v := range chain.invalidators {
+		newInvalidators[k] = v
+	}
+	for k, v := range r.invalidators {
+		newInvalidators[k] = v
+	}
+
+	failure := (r.isFailure && !chain.body[0].Negated) || (!r.isFailure && chain.body[0].Negated)
+
+	if failure {
+		return result{
+			isFailure:    true,
+			invalidators: newInvalidators,
+		}
+	}
+
 	// This environment should map from the dependent's variables through to whatever got bound
 	denv := emptyEnvironment()
 	for k, v := range d.ClauseMapping {
@@ -564,17 +581,10 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) re
 		panic(fmt.Sprint("Generated a non-constant result for subgoal", dependentSubgoal.Literal, "->", newL))
 	}
 
-	newInvalidators := map[uuid.UUID]Literal{}
-	for k, v := range chain.invalidators {
-		newInvalidators[k] = v
-	}
-	for k, v := range r.invalidators {
-		newInvalidators[k] = v
-	}
-
 	return result{
-		env:     denv,
-		Literal: newL,
+		isFailure: false,
+		env:       denv,
+		Literal:   newL,
 		// Do we even need a proof when passing to chains?
 		proof: proof{
 			success:       true,
@@ -601,21 +611,18 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 	if len(chain.body) == 1 {
 		r.env = newEnv
 		chain.results[r.Literal.id()] = resultNext{r, uuid.Nil}
-		// Only pass it to dependents if it matches the polarity of
-		// what we're looking for.
-		if (!chain.body[0].Negated && !r.isFailure) ||
-			(chain.body[0].Negated && r.isFailure) {
-			for _, d := range chain.dependents {
-				dependentResult := g.resultForDependentSubgoal(chain, r, d)
-				g.mergeResultIntoSubgoal(g.subgoals[d.recieverID], dependentResult)
-			}
-			return
+		for _, d := range chain.dependents {
+			dependentResult := g.resultForDependentSubgoal(chain, r, d)
+			g.mergeResultIntoSubgoal(g.subgoals[d.recieverID], dependentResult)
 		}
+		return
 	}
 
 	// TODO: if we held an env and did all of our unification in it, copying it to new
 	// subgoals when merging results, we wouldn't need to rewrite and hold on to all of these
 	// literals.
+
+	// THIS IS NOT DONE WE NEED TO SIGNAL FAILURE  TO THE DEPENDENTS IF WE FAILED
 
 	if (!chain.body[0].Negated && !r.isFailure) ||
 		(chain.body[0].Negated && r.isFailure) {
@@ -634,6 +641,15 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 		chain.results[r.Literal.id()] = resultNext{result: r, next: next}
 		if isNew {
 			g.visitChain(next)
+		}
+	} else {
+		// Failure -- fire the dependents
+		for _, d := range chain.dependents {
+			sg := g.subgoals[d.recieverID]
+			g.mergeResultIntoSubgoal(sg, result{
+				isFailure:    true,
+				invalidators: r.invalidators,
+			})
 		}
 	}
 }
@@ -713,16 +729,14 @@ func (g *goal) visitChain(chainId uuid.UUID) {
 	}
 	// If the leading literal is negated and we get here without accumulating any successful results,
 	// then signal
-	if chain.body[0].Negated {
-		for _, rn := range chain.results {
-			if !rn.result.isFailure {
-				return
-			}
+	for _, rn := range chain.results {
+		if !rn.result.isFailure {
+			return
 		}
-		g.mergeResultIntoChain(chain, result{
-			isFailure: true,
-		})
 	}
+	g.mergeResultIntoChain(chain, result{
+		isFailure: true,
+	})
 }
 
 // Intermediate types used to group data
@@ -860,6 +874,7 @@ func (db *Database) ask(l Literal) []result {
 	db.resultsMutex.Lock()
 	for id, sg := range goal.subgoals {
 		db.mergeResults(sg.Literal, id, sg.results)
+		db.recordInvalidations(sg.Literal, id, sg.invalidators)
 	}
 	db.resultsMutex.Unlock()
 

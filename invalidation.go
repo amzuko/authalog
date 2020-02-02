@@ -30,16 +30,18 @@ func (db *Database) mergeResults(sgl Literal, id uuid.UUID, results map[uuid.UUI
 		db.results[id] = append(db.results[id], r)
 
 		db.proofs[r.Literal.id()] = append(db.proofs[r.Literal.id()], r.proof)
+	}
+}
 
-		for i, l := range r.invalidators {
-			if _, ok := db.invalidations[i]; !ok {
-				db.invalidations[i] = &invalidation{
-					subgoal:           l,
-					dependentSubgoals: []uuid.UUID{},
-				}
+func (db *Database) recordInvalidations(subgoal Literal, id uuid.UUID, invalidators map[uuid.UUID]Literal) {
+	for i, l := range invalidators {
+		if _, ok := db.invalidations[i]; !ok {
+			db.invalidations[i] = &invalidation{
+				subgoal:           l,
+				dependentSubgoals: []uuid.UUID{},
 			}
-			db.invalidations[i].dependentSubgoals = append(db.invalidations[i].dependentSubgoals, id)
 		}
+		db.invalidations[i].dependentSubgoals = append(db.invalidations[i].dependentSubgoals, id)
 	}
 }
 

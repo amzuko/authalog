@@ -80,22 +80,60 @@ func TestNegationInvalidations(t *testing.T) {
 	for _, v := range db.invalidations {
 		fmt.Println(v.subgoal, len(v.dependentSubgoals))
 	}
-	if len(db.invalidations) != 3 {
-		fmt.Println("wrong invalidations")
-		t.Error("Expected 3 invalidations, got", len(db.invalidations))
+	if len(db.invalidations) != 4 {
+		t.Error("Expected 4 invalidations, got", len(db.invalidations))
 	}
 	if len(db.results) != 4 {
 		t.Error("Expected 4 results, got", len(db.results))
 	}
 	report := db.invalidateLiteral(Literal{Predicate: "bar", Terms: []Term{Term{}}})
 
-	if report.countResultsCleared != 1 {
-		t.Error("Expected to clear 1 results, but cleared", report.countResultsCleared)
+	if report.countResultsCleared != 2 {
+		t.Error("Expected to clear 2 results, but cleared", report.countResultsCleared)
 	}
-	if len(db.results) != 3 {
-		t.Error("Expected 3 result, got", len(db.results))
+	if len(db.results) != 2 {
+		t.Error("Expected 2 result, got", len(db.results))
 	}
 	for _, v := range db.results {
 		fmt.Println(len(v))
 	}
+}
+
+var dataWithFailure = `
+foo(a).
+foo(b).
+bar(a).
+baz(X) :- 
+	bar(X).
+`
+
+// TODO THIS TEST IS FLAKY??
+func TestFailureInvalidations(t *testing.T) {
+	db := dbFromString(t, dataWithFailure)
+
+	_, err := db.Apply(db.ParseCommandOrPanic("baz(b)?"))
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(db.invalidations) != 1 {
+		t.Error("Expected 1 invalidations, got", len(db.invalidations))
+	}
+	if len(db.results) != 2 {
+		t.Error("Expected 2 results, got", len(db.results))
+	}
+
+	// We looked for this, so invalidating it should invalidate the subgoals that might have
+	// succeeded if it existed.
+	a := db.ParseCommandOrPanic("bar(b).")
+
+	report := db.invalidateLiteral(a.Head)
+
+	if report.countResultsCleared != 2 {
+		t.Error("Expected to clear 2 results, but cleared", report.countResultsCleared)
+	}
+	if len(db.results) != 0 {
+		t.Error("Expected 0 result, got", len(db.results))
+	}
+
 }
