@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"testing"
 
@@ -100,4 +101,13 @@ func TestRBAC(t *testing.T) {
 	// Is Quincy allowed to create comments?
 	assertTrue(rbac.CheckResourceType(2, Create, Comment))
 
+	// Loki is an admin
+	assertTrue(rbac.CheckResourceType(1, Delete, Post))
+	assertTrue(rbac.Check(1, Delete, 22))
+
+	p, err := rbac.Proof(1, Delete, 22)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(p)
 }
