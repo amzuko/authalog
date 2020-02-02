@@ -82,7 +82,6 @@ func TestNegationInvalidations(t *testing.T) {
 	}
 	if len(db.invalidations) != 3 {
 		fmt.Println("wrong invalidations")
-
 		t.Error("Expected 3 invalidations, got", len(db.invalidations))
 	}
 	if len(db.results) != 4 {
@@ -90,10 +89,13 @@ func TestNegationInvalidations(t *testing.T) {
 	}
 	report := db.invalidateLiteral(Literal{Predicate: "bar", Terms: []Term{Term{}}})
 
-	if report.countResultsCleared != 2 {
-		t.Error("Expected to clear 2 results, but cleared", report.countResultsCleared)
+	if report.countResultsCleared != 1 {
+		t.Error("Expected to clear 1 results, but cleared", report.countResultsCleared)
 	}
-	if len(db.results) != 1 {
-		t.Error("Expected 1 result, got", len(db.results))
+	if len(db.results) != 3 {
+		t.Error("Expected 3 result, got", len(db.results))
+	}
+	for _, v := range db.results {
+		fmt.Println(len(v))
 	}
 }

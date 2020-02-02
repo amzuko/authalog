@@ -18,6 +18,7 @@ func (ir invalidationReport) merge(other invalidationReport) invalidationReport 
 	return ir
 }
 
+// must be called while holding resultsMutex
 func (db *Database) mergeResults(sgl Literal, id uuid.UUID, results map[uuid.UUID]result) {
 	if _, ok := db.results[id]; ok {
 		// results already exist, continue
@@ -44,6 +45,10 @@ func (db *Database) mergeResults(sgl Literal, id uuid.UUID, results map[uuid.UUI
 
 func (db *Database) invalidateLiteral(l Literal) invalidationReport {
 	ir := invalidationReport{}
+
+	db.resultsMutex.Lock()
+	defer db.resultsMutex.Unlock()
+
 	for id, i := range db.invalidations {
 		if ok, _ := unify(i.subgoal, l, emptyEnvironment()); ok {
 			ir = ir.merge(db.invalidate(id))

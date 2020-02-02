@@ -70,6 +70,11 @@ func makeVars(n int) []Term {
 
 func CreateSQLExternalRelation(spec SQLExternalRelationSpec, db *sql.DB) (ExternalRelation, error) {
 
+	// Vet the relation
+	if len(spec.Columns) != len(spec.Types) {
+		return ExternalRelation{}, fmt.Errorf("Mismatch in # of columns (%v) and data types(%v)", len(spec.Columns), len(spec.Types))
+	}
+
 	rt := make([]reflect.Type, len(spec.Types))
 	for i, t := range spec.Types {
 		rt[i] = reflect.TypeOf(t)

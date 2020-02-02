@@ -5,30 +5,32 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"sync"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/spaolacci/murmur3"
 )
 
 type Database struct {
+	clauseMutex sync.RWMutex
 	// Map id to Clause
 	clauses map[uuid.UUID]Clause
 	// Unindexed external rules
 	externalRelations []ExternalRelation
 
+	resultsMutex sync.RWMutex
 	// Map Literal id to proof
 	// TODO: consider not storing this for all derived facts?
 	proofs map[uuid.UUID][]proof
-
 	// Map subgoal hash to results
 	// TODO: we only really need the literal for future things
 	results map[uuid.UUID][]result
 	// Map subgoal hash to other subgoal hashes that depend on it
 	invalidations map[uuid.UUID]*invalidation
 
+	internMutex sync.RWMutex
 	// Used to freshen all stored clauses, so that there are no name collisions between scopes
 	vars int64
-
 	// maps variables and string constants to ints
 	interned       map[string]int64
 	internedLookup map[int64]string
@@ -723,6 +725,19 @@ func (g *goal) visitChain(chainId uuid.UUID) {
 	}
 }
 
+// Intermediate types used to group data
+type fact struct {
+	cid uuid.UUID
+	env environment
+}
+
+type rule struct {
+	cid      uuid.UUID
+	c        Clause
+	env      environment
+	freshEnv environment
+}
+
 func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	sg := g.subgoals[subgoal]
 	trace("visiting", sg.Literal)
@@ -731,7 +746,11 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	}
 	// Check whether or not the database has attempted this subgoal.
 	// TODO: we should be able to store failure as well?
-	if results, ok := g.db.results[sg.Literal.id()]; ok {
+	g.db.resultsMutex.RLock()
+	results, ok := g.db.results[sg.Literal.id()]
+	g.db.resultsMutex.RUnlock()
+
+	if ok {
 		trace("Found results")
 		for _, r := range results {
 			g.mergeResultIntoSubgoal(sg, r)
@@ -740,37 +759,37 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	}
 
 	// Check external relations
+
+	external := []ExternalRelation{}
+	g.db.clauseMutex.RLock()
 	for _, r := range g.db.externalRelations {
 		if ok, _ := unify(sg.Literal, r.head, emptyEnvironment()); ok {
-			trace("matched external", r.head)
-
-			g.runExternalRule(sg, r)
+			external = append(external, r)
 		}
 	}
+	g.db.clauseMutex.RUnlock()
 
+	for _, r := range external {
+		trace("Matched external relation", r.head)
+		g.runExternalRule(sg, r)
+	}
+
+	facts := []fact{}
+	rules := []rule{}
 	// Check Clauses
+	g.db.clauseMutex.RLock()
 	for cid, c := range g.db.clauses {
 		// If it's a fact
 		if len(c.Body) == 0 {
 			if ok, env := unify(sg.Literal, c.Head, emptyEnvironment()); ok {
-				// Pass it up
-				r := result{
-					env:     env,
-					Literal: env.rewrite(sg.Literal),
-					// Literal?
-					proof: proof{
-						success:       true,
-						Clause:        cid,
-						substitutions: env,
-					},
-				}
-				g.mergeResultIntoSubgoal(sg, r)
+				facts = append(facts, fact{cid, env})
 			}
 			continue
 		}
 
 		// It's a rule
-
+		// We need to freshen the subgoal literal because there might be variable name
+		// colisions between clauses, most directly when a clause recurses with itself.
 		freshEnv := emptyEnvironment()
 		fresh := g.freshenIn(sg.Literal, freshEnv)
 
@@ -780,12 +799,43 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 			for k, v := range freshEnv.bindings {
 				freshEnv.bindings[k] = env.chase(v)
 			}
-			chainId, isNew := g.chain(cid, env, c.Body, []dependent{dependent{subgoal, freshEnv.bindings}}, map[uuid.UUID]Literal{})
-			if isNew {
-				g.visitChain(chainId)
-			}
+			rules = append(rules, rule{
+				cid:      cid,
+				c:        c,
+				env:      env,
+				freshEnv: freshEnv,
+			})
 		}
 	}
+	g.db.clauseMutex.RUnlock()
+
+	for _, f := range facts {
+		// Pass it up
+		r := result{
+			env:     f.env,
+			Literal: f.env.rewrite(sg.Literal),
+			// Literal?
+			proof: proof{
+				success:       true,
+				Clause:        f.cid,
+				substitutions: f.env,
+			},
+		}
+		g.mergeResultIntoSubgoal(sg, r)
+	}
+
+	for _, r := range rules {
+		chainId, isNew := g.chain(
+			r.cid,
+			r.env,
+			r.c.Body,
+			[]dependent{dependent{subgoal, r.freshEnv.bindings}},
+			map[uuid.UUID]Literal{})
+		if isNew {
+			g.visitChain(chainId)
+		}
+	}
+
 }
 
 func emptyEnvironment() environment {
@@ -807,10 +857,11 @@ func (db *Database) ask(l Literal) []result {
 
 	goal.visitSubgoal(id)
 
-	// TODO lock
+	db.resultsMutex.Lock()
 	for id, sg := range goal.subgoals {
 		db.mergeResults(sg.Literal, id, sg.results)
 	}
+	db.resultsMutex.Unlock()
 
 	var results []result
 	for _, r := range goal.subgoals[id].results {
@@ -821,6 +872,10 @@ func (db *Database) ask(l Literal) []result {
 }
 
 func (db *Database) assert(c Clause) {
+	db.internMutex.Lock()
+	db.clauseMutex.Lock()
+	defer db.internMutex.Unlock()
+	defer db.clauseMutex.Unlock()
 	fresh, _ := freshen(c, &db.vars)
 	id := fresh.id()
 	db.clauses[id] = fresh
