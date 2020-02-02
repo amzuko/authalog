@@ -27,7 +27,7 @@ const (
 	// upon application.
 	Query
 	// TODO: implement retract
-	//	Retract
+	Retract
 )
 
 // Command a command to mutate or query an authalog database.
@@ -105,4 +105,48 @@ func (db *Database) ToString(results []result) string {
 		str += ".\n"
 	}
 	return str
+}
+
+type Clause struct {
+	Head Literal
+	Body []Literal
+}
+
+type Literal struct {
+	Negated   bool
+	Predicate string
+	Terms     []Term
+}
+
+func (l Literal) String() string {
+	ret := ""
+	if l.Negated {
+		ret = ret + "!"
+	}
+	ret = ret + l.Predicate
+	if len(l.Terms) > 0 {
+		ret = ret + "("
+		termStrings := make([]string, len(l.Terms))
+		for i, t := range l.Terms {
+			if t.IsConstant {
+				termStrings[i] = fmt.Sprintf("c%v", t.Value)
+			} else {
+				termStrings[i] = fmt.Sprintf("v%v", t.Value)
+			}
+		}
+		ret = ret + strings.Join(termStrings, ", ")
+		ret = ret + ")"
+	}
+	return ret
+}
+
+func (c Clause) String() string {
+	var ret = c.Head.String()
+	if len(c.Body) > 0 {
+		ret = ret + " :-\n"
+		for _, l := range c.Body {
+			ret = ret + l.String() + "\n"
+		}
+	}
+	return ret
 }

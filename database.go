@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
-	"strings"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/spaolacci/murmur3"
@@ -16,10 +15,17 @@ type Database struct {
 	clauses map[uuid.UUID]Clause
 	// Unindexed external rules
 	externalRelations []ExternalRelation
+
 	// Map Literal id to proof
+	// TODO: consider not storing this for all derived facts?
 	proofs map[uuid.UUID][]proof
-	// Map goal hash to results
+
+	// Map subgoal hash to results
+	// TODO: we only really need the literal for future things
 	results map[uuid.UUID][]result
+	// Map subgoal hash to other subgoal hashes that depend on it
+	invalidations map[uuid.UUID]*invalidation
+
 	// Used to freshen all stored clauses, so that there are no name collisions between scopes
 	vars int64
 
@@ -32,6 +38,7 @@ func NewDatabase(ExternalRelations []ExternalRelation) *Database {
 	d := Database{
 		clauses:           map[uuid.UUID]Clause{},
 		externalRelations: ExternalRelations,
+		invalidations:     map[uuid.UUID]*invalidation{},
 		proofs:            map[uuid.UUID][]proof{},
 		results:           map[uuid.UUID][]result{},
 		vars:              0,
@@ -39,11 +46,6 @@ func NewDatabase(ExternalRelations []ExternalRelation) *Database {
 		internedLookup:    map[int64]string{},
 	}
 	return &d
-}
-
-type Clause struct {
-	Head Literal
-	Body []Literal
 }
 
 type proof struct {
@@ -56,58 +58,20 @@ type proof struct {
 }
 
 type result struct {
-	isFailure    bool
-	env          environment
-	Literal      Literal
-	proof        proof
-	invalidators []uuid.UUID
-}
-
-type Literal struct {
-	Negated   bool
-	Predicate string
-	Terms     []Term
-}
-
-func (l Literal) String() string {
-	ret := ""
-	if l.Negated {
-		ret = ret + "!"
-	}
-	ret = ret + l.Predicate
-	if len(l.Terms) > 0 {
-		ret = ret + "("
-		termStrings := make([]string, len(l.Terms))
-		for i, t := range l.Terms {
-			if t.IsConstant {
-				termStrings[i] = fmt.Sprintf("c%v", t.Value)
-			} else {
-				termStrings[i] = fmt.Sprintf("v%v", t.Value)
-			}
-		}
-		ret = ret + strings.Join(termStrings, ", ")
-		ret = ret + ")"
-	}
-	return ret
-}
-
-func (c Clause) String() string {
-	var ret = c.Head.String()
-	if len(c.Body) > 0 {
-		ret = ret + " :-\n"
-		for _, l := range c.Body {
-			ret = ret + l.String() + "\n"
-		}
-	}
-	return ret
+	isFailure bool
+	env       environment
+	Literal   Literal
+	proof     proof
+	// subgoal ids to literals
+	// TODO: do we need all this? If we just store the uuid's, we can retrieve that literals from the other subgoals in the
+	// goal structure.
+	invalidators map[uuid.UUID]Literal
 }
 
 type environment struct {
 	bindings map[int64]Term
 }
 
-// A A 2
-// C 1 C
 func (e environment) chase(t Term) Term {
 	if t.IsConstant {
 		return t
@@ -250,7 +214,7 @@ func (g *goal) addDependent(sg *subgoal, additionalDependents []dependent) {
 	}
 }
 
-func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additionalDependents []dependent) (uuid.UUID, bool) {
+func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additionalDependents []dependent, invalidators map[uuid.UUID]Literal) (uuid.UUID, bool) {
 	isNew := false
 
 	newBody := make([]Literal, len(body))
@@ -280,16 +244,23 @@ func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additi
 			newDependents[i] = newd
 		}
 
+		// Merge invalidators
+		for k, v := range invalidators {
+			c.invalidators[k] = v
+		}
+
 		g.addDependentToChain(c, newDependents)
 	} else {
 		isNew = true
 		c := chain{
-			clauseId:   clauseID,
-			body:       newBody,
-			env:        env,
-			results:    map[uuid.UUID]resultNext{},
-			dependents: additionalDependents,
+			clauseId:     clauseID,
+			body:         newBody,
+			env:          env,
+			results:      map[uuid.UUID]resultNext{},
+			dependents:   additionalDependents,
+			invalidators: invalidators,
 		}
+		c.invalidators[newBody[0].id()] = newBody[0]
 		g.chains[id] = &c
 	}
 
@@ -326,9 +297,10 @@ func (g *goal) putSubgoal(l Literal, env environment, additionalDependents []dep
 	} else {
 		isNew = true
 		g.subgoals[id] = &subgoal{
-			Literal:    l,
-			results:    map[uuid.UUID]result{},
-			dependents: additionalDependents,
+			Literal:      l,
+			results:      map[uuid.UUID]result{},
+			dependents:   additionalDependents,
+			invalidators: map[uuid.UUID]Literal{},
 		}
 	}
 	return id, isNew
@@ -355,6 +327,9 @@ type chain struct {
 	results    map[uuid.UUID]resultNext
 	env        environment
 	dependents []dependent
+
+	// Invalidators accumulates subgoals that would invalidate this one
+	invalidators map[uuid.UUID]Literal
 }
 
 type subgoal struct {
@@ -364,9 +339,11 @@ type subgoal struct {
 	// the subgoal's literal. If the literal is negated
 	// TODO: consider a new structure that would allow
 	results map[uuid.UUID]result
-	// The dependents of this subgoal (other subgoals that depend on it)
-	// These
+	// The dependents of this subgoal (chains that depend on it)
 	dependents []dependent
+
+	// Invalidators accumulates the subgoals that would invalidate this one
+	invalidators map[uuid.UUID]Literal
 }
 
 func idFromInts(a uint64, b uint64) uuid.UUID {
@@ -382,7 +359,6 @@ func idFromInts(a uint64, b uint64) uuid.UUID {
 }
 
 func writeHash(hasher murmur3.Hash128, env environment) {
-
 	keys := make([]int64, 0)
 	for k := range env.bindings {
 		keys = append(keys, k)
@@ -559,13 +535,13 @@ func (g *goal) resultForDependentChain(sg *subgoal, r result, d dependent) resul
 	var newL = denv.rewrite(dependentChain.body[0])
 
 	if !newL.allConstant() {
-		// TODO: this still happens?
 		panic(fmt.Sprint("Generated a non-constant result for chain", newL, dependentChain.body[0]))
 	}
 
 	return result{
-		env:     denv,
-		Literal: newL,
+		env:          denv,
+		Literal:      newL,
+		invalidators: map[uuid.UUID]Literal{sg.Literal.id(): sg.Literal},
 	}
 }
 
@@ -583,6 +559,14 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) re
 		panic(fmt.Sprint("Generated a non-constant result for subgoal", dependentSubgoal.Literal, "->", newL))
 	}
 
+	newInvalidators := map[uuid.UUID]Literal{}
+	for k, v := range chain.invalidators {
+		newInvalidators[k] = v
+	}
+	for k, v := range r.invalidators {
+		newInvalidators[k] = v
+	}
+
 	return result{
 		env:     denv,
 		Literal: newL,
@@ -592,6 +576,7 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) re
 			Clause:        chain.clauseId,
 			substitutions: r.env,
 		},
+		invalidators: newInvalidators,
 	}
 }
 
@@ -640,7 +625,7 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 			newDependents[i] = newDependent
 		}
 
-		next, isNew := g.chain(chain.clauseId, newEnv, chain.body[1:], newDependents)
+		next, isNew := g.chain(chain.clauseId, newEnv, chain.body[1:], newDependents, chain.invalidators)
 		chain.results[r.Literal.id()] = resultNext{result: r, next: next}
 		if isNew {
 			g.visitChain(next)
@@ -650,6 +635,14 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 
 func (g *goal) mergeResultIntoSubgoal(sg *subgoal, r result) {
 	trace("Merging", r.Literal, "into", sg.Literal)
+
+	for k, v := range r.invalidators {
+		sg.invalidators[k] = v
+	}
+	if r.isFailure {
+		return
+	}
+
 	if _, ok := sg.results[r.Literal.id()]; !ok {
 		// Store the result so that we can extract results and proof later
 		sg.results[r.Literal.id()] = r
@@ -784,8 +777,7 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 			for k, v := range freshEnv.bindings {
 				freshEnv.bindings[k] = env.chase(v)
 			}
-
-			chainId, isNew := g.chain(cid, env, c.Body, []dependent{dependent{subgoal, freshEnv.bindings}})
+			chainId, isNew := g.chain(cid, env, c.Body, []dependent{dependent{subgoal, freshEnv.bindings}}, map[uuid.UUID]Literal{})
 			if isNew {
 				g.visitChain(chainId)
 			}
@@ -814,17 +806,7 @@ func (db *Database) ask(l Literal) []result {
 
 	// TODO lock
 	for id, sg := range goal.subgoals {
-		if _, ok := db.results[id]; ok {
-			// results already exist, continue
-			continue
-		} else {
-			db.results[id] = make([]result, 0)
-		}
-		for _, rn := range sg.results {
-			db.results[id] = append(db.results[id], rn)
-
-			db.proofs[rn.Literal.id()] = append(db.proofs[rn.Literal.id()], rn.proof)
-		}
+		db.mergeResults(sg.Literal, id, sg.results)
 	}
 
 	var results []result
