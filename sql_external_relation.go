@@ -10,7 +10,11 @@ import (
 type SQLExternalRelationSpec struct {
 	Table   string
 	Columns []string
-	Types   []interface{}
+	// While labeled 'types', we actually pass example interfaces.
+	// EG:
+	// 		Types: []interface{}{0, "", MyEnumValue}
+	// For a database relation that has a tuple of types (int, string, MyEnum).
+	Types []interface{}
 }
 
 func sqlQueryForTerms(intern interner, spec SQLExternalRelationSpec, terms []Term) (string, []interface{}) {

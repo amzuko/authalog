@@ -37,7 +37,6 @@ const (
 )
 
 var policy = `
-
 checkResource(User, Action, Resource) :-
 	resourceType(Resource, ResourceType),
 	users(User, Role),
@@ -83,16 +82,16 @@ func NewRBACAuthorizer(db *sql.DB) (*RBACAuthorizer, error) {
 	}
 	posts, err := authalog.CreateSQLExternalRelation(authalog.SQLExternalRelationSpec{
 		Table:   "posts",
-		Columns: []string{"id"},
-		Types:   []interface{}{0},
+		Columns: []string{"id", "author"},
+		Types:   []interface{}{0, 0},
 	}, db)
 	if err != nil {
 		return nil, err
 	}
 	comments, err := authalog.CreateSQLExternalRelation(authalog.SQLExternalRelationSpec{
 		Table:   "comments",
-		Columns: []string{"id"},
-		Types:   []interface{}{0},
+		Columns: []string{"id", "author"},
+		Types:   []interface{}{0, 0},
 	}, db)
 	if err != nil {
 		return nil, err

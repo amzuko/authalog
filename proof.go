@@ -50,7 +50,6 @@ func (db *Database) ProofString(l Literal) string {
 		db.writeClause(result, &substituted, Assert)
 		if len(substituted.Body) > 0 {
 			toProove = append(substituted.Body, toProove...)
-
 		}
 	}
 

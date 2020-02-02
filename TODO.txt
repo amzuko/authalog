@@ -2,12 +2,12 @@ Store subgoal failure in results / proofs somehow?
 Index clauses
 Primitive functions + bindings to sql example
 Explanation formatting strings
-RBAC example
 Cache invalidation -- HOW?
 Static errors
     Track parse position
     Feed back along with errors
     Negation inside recursion
+    Calling relations with wrong # of arguments
 Docstring comments on rules
 Web UI for interacting with db
 Pass errors up through querying

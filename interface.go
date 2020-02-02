@@ -26,22 +26,23 @@ const (
 	// Query - this command will return the results of querying a database
 	// upon application.
 	Query
-	// TODO
-	Retract
+	// TODO: implement retract
+	//	Retract
 )
 
-// DatalogCommand a command to mutate or query a gotalog database.
-type DatalogCommand struct {
+// Command a command to mutate or query an authalog database.
+// TODO: Consider passing around commands that use strings, so that nobody ever sees a non-interned string?
+type Command struct {
 	Head        Literal
 	Body        []Literal
 	CommandType CommandType
 }
 
-// Parse consumes a reader, producing a slice of datalogCommands.
-func (db *Database) Parse(input io.Reader) ([]DatalogCommand, error) {
+// Parse consumes a reader, producing a slice of Commands.
+func (db *Database) Parse(input io.Reader) ([]Command, error) {
 	s := newScanner(input, db)
 
-	commands := make([]DatalogCommand, 0)
+	commands := make([]Command, 0)
 
 	for {
 		c, finished, err := s.scanOneCommand()
@@ -52,7 +53,7 @@ func (db *Database) Parse(input io.Reader) ([]DatalogCommand, error) {
 	}
 }
 
-func (db *Database) ParseCommandOrPanic(str string) DatalogCommand {
+func (db *Database) ParseCommandOrPanic(str string) Command {
 	s := newScanner(strings.NewReader(str), db)
 	c, _, err := s.scanOneCommand()
 	if err != nil {
@@ -62,7 +63,7 @@ func (db *Database) ParseCommandOrPanic(str string) DatalogCommand {
 }
 
 // Apply applies a single command.
-func (db *Database) Apply(cmd DatalogCommand) ([]result, error) {
+func (db *Database) Apply(cmd Command) ([]result, error) {
 	switch cmd.CommandType {
 	case Assert:
 		c := Clause{

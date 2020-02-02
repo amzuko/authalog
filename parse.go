@@ -218,7 +218,7 @@ func (s scanner) scanLiteral() (lit Literal, err error) {
 	return
 }
 
-func (s scanner) scanCommand() (cmd DatalogCommand, err error) {
+func (s scanner) scanCommand() (cmd Command, err error) {
 	s.consumeWhitespace()
 	cmd.Head, err = s.scanLiteral()
 	if err != nil {
@@ -273,12 +273,12 @@ func (s scanner) scanCommand() (cmd DatalogCommand, err error) {
 	}
 }
 
-func (s scanner) scanOneCommand() (DatalogCommand, bool, error) {
+func (s scanner) scanOneCommand() (Command, bool, error) {
 	s.consumeWhitespace()
 	ch, _, err := s.r.ReadRune()
 
 	if ch == eof || err != nil {
-		return DatalogCommand{}, true, nil
+		return Command{}, true, nil
 	}
 	s.r.UnreadRune()
 
