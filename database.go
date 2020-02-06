@@ -36,10 +36,10 @@ type Database struct {
 	internedLookup map[int64]string
 }
 
-func NewDatabase(ExternalRelations []ExternalRelation) *Database {
+func NewDatabase() *Database {
 	d := Database{
 		clauses:           map[uuid.UUID]Clause{},
-		externalRelations: ExternalRelations,
+		externalRelations: []ExternalRelation{},
 		invalidations:     map[uuid.UUID]*invalidation{},
 		proofs:            map[uuid.UUID][]proof{},
 		results:           map[uuid.UUID][]result{},
@@ -48,6 +48,10 @@ func NewDatabase(ExternalRelations []ExternalRelation) *Database {
 		internedLookup:    map[int64]string{},
 	}
 	return &d
+}
+
+func (db *Database) AddExternalRelations(er ...ExternalRelation) {
+	db.externalRelations = append(db.externalRelations, er...)
 }
 
 type proof struct {
@@ -618,12 +622,6 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 		return
 	}
 
-	// TODO: if we held an env and did all of our unification in it, copying it to new
-	// subgoals when merging results, we wouldn't need to rewrite and hold on to all of these
-	// literals.
-
-	// THIS IS NOT DONE WE NEED TO SIGNAL FAILURE  TO THE DEPENDENTS IF WE FAILED
-
 	if (!chain.body[0].Negated && !r.isFailure) ||
 		(chain.body[0].Negated && r.isFailure) {
 		// Create new dependents
@@ -854,7 +852,7 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 
 func emptyEnvironment() environment {
 	return environment{
-		bindings: map[int64]Term{},
+		bindings: make(map[int64]Term, 0),
 	}
 }
 
@@ -873,6 +871,7 @@ func (db *Database) ask(l Literal) []result {
 
 	db.resultsMutex.Lock()
 	for id, sg := range goal.subgoals {
+		trace("merging", id, sg.Literal.id(), sg.Literal)
 		db.mergeResults(sg.Literal, id, sg.results)
 		db.recordInvalidations(sg.Literal, id, sg.invalidators)
 	}

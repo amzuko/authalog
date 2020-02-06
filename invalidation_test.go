@@ -1,13 +1,12 @@
 package authalog
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
 
 func dbFromString(t *testing.T, str string) *Database {
-	db := NewDatabase([]ExternalRelation{})
+	db := NewDatabase()
 	cs, err := db.Parse(strings.NewReader(str))
 	if err != nil {
 		t.Error(err)
@@ -77,9 +76,6 @@ func TestNegationInvalidations(t *testing.T) {
 		t.Error(err)
 	}
 
-	for _, v := range db.invalidations {
-		fmt.Println(v.subgoal, len(v.dependentSubgoals))
-	}
 	if len(db.invalidations) != 4 {
 		t.Error("Expected 4 invalidations, got", len(db.invalidations))
 	}
@@ -94,9 +90,6 @@ func TestNegationInvalidations(t *testing.T) {
 	if len(db.results) != 2 {
 		t.Error("Expected 2 result, got", len(db.results))
 	}
-	for _, v := range db.results {
-		fmt.Println(len(v))
-	}
 }
 
 var dataWithFailure = `
@@ -107,7 +100,6 @@ baz(X) :-
 	bar(X).
 `
 
-// TODO THIS TEST IS FLAKY??
 func TestFailureInvalidations(t *testing.T) {
 	db := dbFromString(t, dataWithFailure)
 

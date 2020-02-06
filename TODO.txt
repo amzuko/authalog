@@ -1,7 +1,6 @@
 Index clauses
 Explanation formatting strings
 Cache invalidation -- HOW?
-    Track failures in chains -- the first clause that fails can invalidate the chain's target subgoal
     Invalidate on external relation change
     Invalidate on asserting new clauses / facts
     Invalidate on retracting things

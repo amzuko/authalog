@@ -98,8 +98,9 @@ func NewRBACAuthorizer(db *sql.DB) (*RBACAuthorizer, error) {
 	}
 
 	rbac := RBACAuthorizer{
-		db: authalog.NewDatabase([]authalog.ExternalRelation{users, posts, comments}),
+		db: authalog.NewDatabase(),
 	}
+	rbac.db.AddExternalRelations(users, posts, comments)
 
 	commands, err := rbac.db.Parse(strings.NewReader(policy))
 	if err != nil {

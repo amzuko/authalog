@@ -3,6 +3,7 @@ package authalog
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func c(i interner, s string) Term {
@@ -46,8 +47,8 @@ var testRelation = ExternalRelation{
 }
 
 func TestExternalRule(t *testing.T) {
-	db := NewDatabase([]ExternalRelation{})
-	db.externalRelations = append(db.externalRelations, testRelation)
+	db := NewDatabase()
+	db.AddExternalRelations(testRelation)
 	cmds, err := db.Parse(strings.NewReader(`
 	foo(a).
 	foo(b).
@@ -75,4 +76,31 @@ func TestExternalRule(t *testing.T) {
 bar(a, d).
 `)
 
+}
+
+func TestInvalidatingExternalRule(t *testing.T) {
+	db := NewDatabase()
+	ttl := NewTTLInvalidator(db, 100*time.Millisecond, 10*time.Millisecond)
+	db.AddExternalRelations(ttl.InvalidatingRelation(testRelation))
+
+	c := db.ParseCommandOrPanic("external(X, Y)?")
+
+	r, err := db.Apply(c)
+	if len(r) != 4 {
+		t.Error("Expected 4 results")
+	}
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(db.results) != 1 {
+		t.Error("Expected 1 result before starting invalidator")
+	}
+	// Start the invalidator
+	ttl.Start()
+	// Give it some time to clean out it's queue
+	time.Sleep(200 * time.Millisecond)
+	if len(db.results) != 0 {
+		t.Error("Expected 0 results after starting invalidator, but got", len(db.results))
+	}
 }

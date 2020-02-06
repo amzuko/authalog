@@ -2,13 +2,12 @@ package authalog
 
 import (
 	"bufio"
-	"fmt"
 	"strings"
 	"testing"
 )
 
 func parseApplyExecute(t *testing.T, prog string) string {
-	db := NewDatabase([]ExternalRelation{})
+	db := NewDatabase()
 	cmds, err := db.Parse(strings.NewReader(prog))
 	if err != nil {
 		t.Errorf("Error parsing: %s", err)
@@ -206,7 +205,7 @@ func TestProofStruct(t *testing.T) {
 		t.Error("Wrong case")
 	}
 
-	db := NewDatabase([]ExternalRelation{})
+	db := NewDatabase()
 	cmds, err := db.Parse(strings.NewReader(c.prog))
 	if err != nil {
 		t.Errorf("Error parsing: %s", err)
@@ -231,8 +230,9 @@ baz(1, 3).` {
 						t.Errorf("nexpected proofstring: %v", resultString)
 					}
 				}
-				fmt.Println("PROOFSTRING FOR LITERAL:", r.Literal)
-				fmt.Println(resultString)
+				// TODO VALIDATE PROOF STRING
+				// fmt.Println("PROOFSTRING FOR LITERAL:", r.Literal)
+				// fmt.Println(resultString)
 			}
 		}
 	}

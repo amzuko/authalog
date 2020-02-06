@@ -46,6 +46,7 @@ func (db *Database) recordInvalidations(subgoal Literal, id uuid.UUID, invalidat
 }
 
 func (db *Database) invalidateLiteral(l Literal) invalidationReport {
+	trace("Invalidating", l)
 	ir := invalidationReport{}
 
 	db.resultsMutex.Lock()
@@ -53,18 +54,26 @@ func (db *Database) invalidateLiteral(l Literal) invalidationReport {
 
 	for id, i := range db.invalidations {
 		if ok, _ := unify(i.subgoal, l, emptyEnvironment()); ok {
+			trace("matched", i.subgoal)
 			ir = ir.merge(db.invalidate(id))
+		} else {
+			trace("Failed to match", i.subgoal)
 		}
 	}
 
+	trace(db.results)
+	trace(l.id())
+	trace(subgoalHash(l))
+
 	// Clear this literal's results -- it might have no dependents
-	if rs, ok := db.results[l.id()]; ok {
+	if rs, ok := db.results[subgoalHash(l)]; ok {
+		trace("invalidating literal's direct results")
 		ir.countResultsCleared++
 		for _, r := range rs {
 			delete(db.proofs, r.Literal.id())
 		}
 	}
-	delete(db.results, l.id())
+	delete(db.results, subgoalHash(l))
 
 	return ir
 }
