@@ -5,13 +5,12 @@ import (
 	"time"
 )
 
-// TTL Invalidator
-
 type ttlAlive struct {
 	l     Literal
 	alive int64 // Unix Nanoseconds
 }
 
+// TTL Invalidator
 type TTLInvalidator struct {
 	db         *Database
 	requests   chan ttlAlive
@@ -19,12 +18,15 @@ type TTLInvalidator struct {
 	bufferLock sync.Mutex
 	timeout    int64
 	cycle      int64
-	next       ttlAlive
 }
 
 func NewTTLInvalidator(db *Database, timeout time.Duration, cycle time.Duration) *TTLInvalidator {
 	ttl := TTLInvalidator{
-		db:       db,
+		db: db,
+		// Hard code a reasonable buffer size.
+		// If we make more external relation calls that must be invalidated than the length
+		// of this buffer in less than the invalidation loop's cycle time, we will start to block
+		// goroutines making invalidation requests
 		requests: make(chan ttlAlive, 1000),
 		timeout:  int64(timeout),
 		cycle:    int64(cycle),
@@ -33,32 +35,45 @@ func NewTTLInvalidator(db *Database, timeout time.Duration, cycle time.Duration)
 }
 
 func (ttl *TTLInvalidator) Start() {
-	l := func() {
+	// TODO: isn't there a way to do all of this on a single goroutine?
+	// It feels weird to need two when we're already using a channel for
+	// communication with a potentially larger number of goroutines.
+	dequeue := func() {
 		for {
-			if ttl.next.alive != 0 {
-				if time.Now().UnixNano() > ttl.next.alive+ttl.timeout {
-					trace("invalidating next")
-					ttl.db.invalidateLiteral(ttl.next.l)
-				} else {
-					goto sleep
-				}
-			}
-
-			for {
-				ttl.next = <-ttl.requests
-				trace("Got", ttl.next)
-				if time.Now().UnixNano() > ttl.next.alive+ttl.timeout {
-					ttl.db.invalidateLiteral(ttl.next.l)
-				} else {
-					goto sleep
-				}
-			}
-		sleep:
-			time.Sleep(time.Duration(ttl.cycle))
+			a := <-ttl.requests
+			ttl.bufferLock.Lock()
+			ttl.buffer = append(ttl.buffer, a)
+			ttl.bufferLock.Unlock()
 		}
 	}
 
-	go l()
+	go dequeue()
+
+	invalidate := func() {
+		for {
+			ttl.bufferLock.Lock()
+			count := 0
+			for count < len(ttl.buffer) {
+				if time.Now().UnixNano() > ttl.buffer[count].alive+ttl.timeout {
+					count++
+				} else {
+					break
+				}
+			}
+			var toInvalidate []ttlAlive
+			if count > 0 {
+				toInvalidate = ttl.buffer[0:count]
+				ttl.buffer = ttl.buffer[count:]
+			}
+			ttl.bufferLock.Unlock()
+			for _, a := range toInvalidate {
+				ttl.db.invalidateLiteral(a.l)
+			}
+			time.Sleep(time.Duration(ttl.cycle))
+		}
+	}
+	go invalidate()
+
 }
 
 func (ttl *TTLInvalidator) InvalidatingRelation(er ExternalRelation) ExternalRelation {
