@@ -116,36 +116,28 @@ func NewRBACAuthorizer(db *sql.DB) (*RBACAuthorizer, error) {
 }
 
 func (rbac *RBACAuthorizer) Check(user int, action Action, resource int) (bool, error) {
-	// TODO: we're passing int's as strings?
-	// TODO: should we be constructing a literal directly, instead of creating a string?
-	q := fmt.Sprintf("checkResource(%v, '%v', '%v')?", user, action, resource)
-	c, err := rbac.db.Parse(strings.NewReader(q))
-	if err != nil {
-		return false, err
-	}
-	results, err := rbac.db.Apply(c[0])
+	l := rbac.db.Literal("checkResource", user, action, resource)
+	results, err := rbac.db.Apply(
+		authalog.Ask(l))
 	return len(results) != 0, err
 }
 
 func (rbac *RBACAuthorizer) CheckResourceType(user int, action Action, resourceType ResourceType) (bool, error) {
-	q := fmt.Sprintf("checkResourceType(%v, '%v', '%v')?", user, action, resourceType)
-	c, err := rbac.db.Parse(strings.NewReader(q))
-	if err != nil {
-		return false, err
-	}
-	results, err := rbac.db.Apply(c[0])
+	results, err := rbac.db.Apply(
+		authalog.Ask(
+			rbac.db.Literal("checkResourceType", user, action, resourceType)))
 	return len(results) != 0, err
 }
 
 func (rbac *RBACAuthorizer) Proof(user int, action Action, resource int) (string, error) {
-	q := fmt.Sprintf("checkResource(%v, '%v', '%v')?", user, action, resource)
-	c, err := rbac.db.Parse(strings.NewReader(q))
+	l := rbac.db.Literal("checkResource", user, action, resource)
+	results, err := rbac.db.Apply(
+		authalog.Ask(l))
 	if err != nil {
 		return "", err
 	}
-	results, err := rbac.db.Apply(c[0])
 	if len(results) == 0 {
 		return "", fmt.Errorf("Cannot proove as check fails")
 	}
-	return rbac.db.ProofString(c[0].Head), nil
+	return rbac.db.ProofString(l), nil
 }

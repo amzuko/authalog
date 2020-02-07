@@ -48,11 +48,11 @@ func isTerminal(ch rune) bool {
 func commandForTerminal(ch rune) CommandType {
 	switch ch {
 	case '.':
-		return Assert
+		return CommandAssert
 	case '?':
-		return Query
+		return CommandQuery
 	case '~':
-		return Retract
+		return CommandRetract
 	default:
 		panic("invalid terminal rune.")
 	}
@@ -286,7 +286,6 @@ func (s scanner) scanOneCommand() (Command, bool, error) {
 	return c, false, err
 }
 
-// TODO: UUUID
 func (db *Database) termString(t Term) string {
 	if interned, ok := db.internedLookup[t.Value]; ok {
 		leading, _ := utf8.DecodeRuneInString(interned)
@@ -351,12 +350,56 @@ func (db *Database) writeClause(w io.Writer, c *Clause, t CommandType) error {
 		}
 	}
 	switch t {
-	case Assert:
+	case CommandAssert:
 		_, err = io.WriteString(w, ".\n")
-	case Query:
+	case CommandQuery:
 		_, err = io.WriteString(w, "?\n")
-	case Retract:
+	case CommandRetract:
 		_, err = io.WriteString(w, "~\n")
 	}
 	return err
+}
+
+type vardef struct {
+	name string
+}
+
+func Var(s string) interface{} {
+	return vardef{s}
+}
+
+func Ask(l Literal) Command {
+	return Command{
+		Head:        l,
+		CommandType: CommandQuery,
+	}
+}
+
+func Assert(l Literal) Command {
+	return Command{
+		Head:        l,
+		CommandType: CommandAssert,
+	}
+}
+
+func (db *Database) Literal(predicate string, terms ...interface{}) Literal {
+	ts := make([]Term, len(terms))
+	for i, v := range terms {
+		switch v.(type) {
+		case vardef:
+			ts[i] = Term{
+				IsConstant: false,
+				Value:      db.intern(v.(vardef).name),
+			}
+		default:
+			ts[i] = Term{
+				IsConstant: true,
+				Value:      db.intern(fmt.Sprint(v)),
+			}
+		}
+	}
+	return Literal{
+		Predicate: predicate,
+		Terms:     ts,
+	}
 }

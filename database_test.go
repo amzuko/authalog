@@ -218,7 +218,7 @@ func TestProofStruct(t *testing.T) {
 			t.Error(err)
 			t.Fail()
 		}
-		if c.CommandType == Query {
+		if c.CommandType == CommandQuery {
 			for _, r := range results {
 				resultString := db.ProofString(r.Literal)
 				if r.Literal.String() == "bar(1,3)." {

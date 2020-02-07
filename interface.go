@@ -21,13 +21,13 @@ type Term struct {
 type CommandType int
 
 const (
-	// Assert - this fact will be added to a database upon application.
-	Assert CommandType = iota
-	// Query - this command will return the results of querying a database
+	// CommandAssert - this fact will be added to a database upon application.
+	CommandAssert CommandType = iota
+	// CommandQuery - this command will return the results of querying a database
 	// upon application.
-	Query
+	CommandQuery
 	// TODO: implement retract
-	Retract
+	CommandRetract
 )
 
 // Command a command to mutate or query an authalog database.
@@ -65,7 +65,7 @@ func (db *Database) ParseCommandOrPanic(str string) Command {
 // Apply applies a single command.
 func (db *Database) Apply(cmd Command) ([]result, error) {
 	switch cmd.CommandType {
-	case Assert:
+	case CommandAssert:
 		c := Clause{
 			Head: cmd.Head,
 			Body: cmd.Body,
@@ -78,7 +78,7 @@ func (db *Database) Apply(cmd Command) ([]result, error) {
 
 		db.assert(c)
 		return nil, nil
-	case Query:
+	case CommandQuery:
 		res := db.ask(cmd.Head)
 		return res, nil
 	default:

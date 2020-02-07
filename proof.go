@@ -47,7 +47,7 @@ func (db *Database) ProofString(l Literal) string {
 
 		c := db.clauses[p.Clause]
 		substituted := p.substitutions.rewriteClause(c)
-		db.writeClause(result, &substituted, Assert)
+		db.writeClause(result, &substituted, CommandAssert)
 		if len(substituted.Body) > 0 {
 			toProove = append(substituted.Body, toProove...)
 		}
