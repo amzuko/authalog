@@ -129,21 +129,6 @@ func rewritten(a environment, chaser environment) environment {
 	return ret
 }
 
-func (e *environment) has(k int64) bool {
-	for i := 0; i < e.count; i++ {
-		b := e.bindings[i]
-		if b.k == k {
-			return true
-		}
-	}
-	for _, b := range e.extension {
-		if b.k == k {
-			return true
-		}
-	}
-	return false
-}
-
 func (e *environment) chase(t Term) Term {
 	if t.IsConstant {
 		return t
@@ -161,31 +146,6 @@ func (e *environment) chase(t Term) Term {
 		}
 	}
 	return t
-}
-
-func (e *environment) getValue(key int64) (Term, bool) {
-	for i := 0; i < e.count; i++ {
-		b := e.bindings[i]
-		if b.k == key {
-			return b.v, true
-		}
-	}
-	for _, b := range e.extension {
-		if b.k == key {
-			return b.v, true
-		}
-	}
-	return Term{}, false
-}
-
-func (e *environment) bindUnsafe(id int64, t Term) {
-
-	if e.count < ENV_FIXED_LENGTH {
-		e.bindings[e.count] = binding{id, t}
-	} else {
-		e.extension = append(e.extension, binding{id, t})
-	}
-	e.count++
 }
 
 func (e *environment) bind(id int64, t Term) {
