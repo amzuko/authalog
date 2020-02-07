@@ -53,7 +53,8 @@ func (db *Database) invalidateLiteral(l Literal) invalidationReport {
 	defer db.resultsMutex.Unlock()
 
 	for id, i := range db.invalidations {
-		if ok, _ := unify(i.subgoal, l, emptyEnvironment()); ok {
+		match := emptyEnvironment()
+		if ok := unify(i.subgoal, l, &match); ok {
 			trace("matched", i.subgoal)
 			ir = ir.merge(db.invalidate(id))
 		} else {

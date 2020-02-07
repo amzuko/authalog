@@ -32,7 +32,7 @@ func checkFile(filename string) error {
 
 func BenchmarkClique(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		err := checkFile("tests/clique200.pl")
+		err := checkFile("tests/clique1000.pl")
 		if err != nil {
 			b.Error(err)
 		}

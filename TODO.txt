@@ -1,9 +1,9 @@
 Index clauses
-Explanation formatting strings
-Cache invalidation -- HOW?
+Cache invalidation
     Invalidate on external relation change
     Invalidate on asserting new clauses / facts
     Invalidate on retracting things
+Perf: reduce small map allocations
 Static errors
     Track parse position
     Feed back along with errors

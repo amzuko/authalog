@@ -74,32 +74,145 @@ type result struct {
 	invalidators map[uuid.UUID]Literal
 }
 
-type environment struct {
-	bindings map[int64]Term
+type binding struct {
+	k int64
+	v Term
 }
 
-func (e environment) chase(t Term) Term {
+const ENV_FIXED_LENGTH = 8
+
+type environment struct {
+	bindings  [ENV_FIXED_LENGTH]binding
+	extension []binding
+	count     int
+}
+
+func (e *environment) forEach(cb func(k int64, v Term)) {
+	for i := 0; i < e.count && i < ENV_FIXED_LENGTH; i++ {
+		cb(e.bindings[i].k, e.bindings[i].v)
+	}
+
+	for _, b := range e.extension {
+		cb(b.k, b.v)
+	}
+}
+
+func emptyEnvironment() environment {
+	return environment{}
+}
+
+func (e *environment) reset() {
+	e.count = 0
+	e.extension = nil
+}
+
+func rewritten(a environment, chaser environment) environment {
+	ret := environment{
+		count: a.count,
+	}
+
+	for i := 0; i < a.count && i < ENV_FIXED_LENGTH; i++ {
+		b := a.bindings[i]
+		ret.bindings[i].k = b.k
+		ret.bindings[i].v = chaser.chase(b.v)
+	}
+
+	if a.count > ENV_FIXED_LENGTH {
+		ret.extension = make([]binding, a.count-ENV_FIXED_LENGTH)
+
+		for i := 0; i < a.count-ENV_FIXED_LENGTH; i++ {
+			b := a.extension[i]
+			ret.extension[i].k = b.k
+			ret.extension[i].v = chaser.chase(b.v)
+		}
+	}
+	return ret
+}
+
+func (e *environment) has(k int64) bool {
+	for i := 0; i < e.count; i++ {
+		b := e.bindings[i]
+		if b.k == k {
+			return true
+		}
+	}
+	for _, b := range e.extension {
+		if b.k == k {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *environment) chase(t Term) Term {
 	if t.IsConstant {
 		return t
 	}
-	if bound, ok := e.bindings[t.Value]; ok {
-		return bound
+
+	for i := 0; i < e.count; i++ {
+		b := e.bindings[i]
+		if b.k == t.Value {
+			return b.v
+		}
+	}
+	for _, b := range e.extension {
+		if b.k == t.Value {
+			return b.v
+		}
 	}
 	return t
 }
 
-func (e environment) bind(id int64, t Term) {
+func (e *environment) getValue(key int64) (Term, bool) {
+	for i := 0; i < e.count; i++ {
+		b := e.bindings[i]
+		if b.k == key {
+			return b.v, true
+		}
+	}
+	for _, b := range e.extension {
+		if b.k == key {
+			return b.v, true
+		}
+	}
+	return Term{}, false
+}
+
+func (e *environment) bindUnsafe(id int64, t Term) {
+
+	if e.count < ENV_FIXED_LENGTH {
+		e.bindings[e.count] = binding{id, t}
+	} else {
+		e.extension = append(e.extension, binding{id, t})
+	}
+	e.count++
+}
+
+func (e *environment) bind(id int64, t Term) {
 	if !t.IsConstant && id == t.Value {
 		panic(fmt.Sprintf("Binding variable to itself: %v", t.Value))
 	}
-
-	if existing, ok := e.bindings[id]; ok && existing != t {
-		panic(fmt.Sprintf("Cannot rebind variables: %v. old: %v new : %v", id, existing, t))
+	for i := 0; i < e.count; i++ {
+		b := e.bindings[i]
+		if b.k == id {
+			panic(fmt.Sprintf("Cannot rebind variables: %v. old: %v new : %v", id, b.v, t))
+		}
 	}
-	e.bindings[id] = t
+	for _, b := range e.extension {
+		if b.k == id {
+			panic(fmt.Sprintf("Cannot rebind variables: %v. old: %v new : %v", id, b.v, t))
+		}
+	}
+
+	if e.count < ENV_FIXED_LENGTH {
+		e.bindings[e.count] = binding{id, t}
+	} else {
+		e.extension = append(e.extension, binding{id, t})
+	}
+	e.count++
 }
 
-func (t Term) unify(other Term, env environment) bool {
+func (t Term) unify(other Term, env *environment) bool {
 	// TODO should move the check for aboslute equality here?
 	if t.IsConstant && other.IsConstant {
 		return false
@@ -111,9 +224,9 @@ func (t Term) unify(other Term, env environment) bool {
 	return true
 }
 
-func unify(a Literal, b Literal, in environment) (bool, environment) {
+func unify(a Literal, b Literal, in *environment) bool {
 	if a.Predicate != b.Predicate || len(a.Terms) != len(b.Terms) {
-		return false, environment{}
+		return false
 	}
 
 	for i := range a.Terms {
@@ -124,11 +237,11 @@ func unify(a Literal, b Literal, in environment) (bool, environment) {
 		if at != bt {
 			success := at.unify(bt, in)
 			if !success {
-				return false, in
+				return false
 			}
 		}
 	}
-	return true, in
+	return true
 }
 
 type goal struct {
@@ -154,11 +267,11 @@ func dependentsEqual(a dependent, b dependent) bool {
 		return false
 	}
 
-	for k, va := range a.ClauseMapping {
-		if vb, ok := b.ClauseMapping[k]; !ok {
+	for ak, av := range a.ClauseMapping {
+		if bv, ok := b.ClauseMapping[ak]; !ok {
 			return false
 		} else {
-			if va != vb {
+			if bv != av {
 				return false
 			}
 		}
@@ -235,7 +348,7 @@ func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additi
 		// Need to rewrite the clausemapping of the dependents?
 		rewriteEnv := emptyEnvironment()
 		for i, l := range newBody {
-			alwaysTrue, _ := unify(c.body[i], l, rewriteEnv)
+			alwaysTrue := unify(c.body[i], l, &rewriteEnv)
 			if !alwaysTrue {
 				panic("something went very wrong")
 			}
@@ -286,21 +399,23 @@ func (g *goal) putSubgoal(l Literal, env environment, additionalDependents []dep
 		// We need to rewrite the new dependents variable mappings to use
 		// the variable names in the existing subgoal.
 		// TODO do we need to unify the entire body?
-		env := emptyEnvironment()
-		alwaysTrue, env := unify(sg.Literal, l, env)
+		match := emptyEnvironment()
+		alwaysTrue := unify(sg.Literal, l, &match)
 		if !alwaysTrue {
 			panic("Something went very wrong")
 		}
 
 		newDependents := make([]dependent, len(additionalDependents))
 		for i, d := range additionalDependents {
-			newDependents[i] = dependent{d.recieverID, map[int64]Term{}}
+			newd := dependent{d.recieverID, map[int64]Term{}}
+			for k, v := range d.ClauseMapping {
+				newd.ClauseMapping[k] = match.chase(v)
+			}
+			newDependents[i] = newd
 			// I think that these d.ClauseMapping is always empty, but thats not right
 			// TODO can we always completely construct the cluasemapping from the env??
 			// Or are there cases wherein we need to pull information from the original dependent's clausempapping? is it always empty?
-			for k, v := range d.ClauseMapping {
-				newDependents[i].ClauseMapping[k] = env.chase(v)
-			}
+
 		}
 		g.addDependent(sg, newDependents)
 	} else {
@@ -369,8 +484,11 @@ func idFromInts(a uint64, b uint64) uuid.UUID {
 
 func writeHash(hasher murmur3.Hash128, env environment) {
 	keys := make([]int64, 0)
-	for k := range env.bindings {
-		keys = append(keys, k)
+	for i := 0; i < env.count && i < ENV_FIXED_LENGTH; i++ {
+		keys = append(keys, env.bindings[i].k)
+	}
+	for _, b := range env.extension {
+		keys = append(keys, b.k)
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 	for _, k := range keys {
@@ -382,9 +500,9 @@ func writeHash(hasher murmur3.Hash128, env environment) {
 
 func (env environment) fullmap() string {
 	keys := make([]int64, 0)
-	for k := range env.bindings {
+	env.forEach(func(k int64, v Term) {
 		keys = append(keys, k)
-	}
+	})
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
 	s := ""
@@ -492,12 +610,12 @@ func writeStructuralTag(hasher murmur3.Hash128, literals []Literal) {
 }
 
 // mutates env
-func (g *goal) freshenIn(l Literal, env environment) Literal {
+func (g *goal) freshenIn(l Literal, env *environment) Literal {
 	return freshenIn(l, &g.varCount, env)
 }
 
 // mutates env
-func freshenIn(l Literal, count *int64, env environment) Literal {
+func freshenIn(l Literal, count *int64, env *environment) Literal {
 	result := Literal{
 		Negated:   l.Negated,
 		Predicate: l.Predicate,
@@ -522,12 +640,12 @@ func freshenIn(l Literal, count *int64, env environment) Literal {
 }
 
 func freshen(c Clause, counter *int64) (Clause, environment) {
-	resultEnv := environment{bindings: map[int64]Term{}}
+	resultEnv := emptyEnvironment()
 	result := Clause{}
-	result.Head = freshenIn(c.Head, counter, resultEnv)
+	result.Head = freshenIn(c.Head, counter, &resultEnv)
 	result.Body = make([]Literal, len(c.Body))
 	for i, l := range c.Body {
-		result.Body[i] = freshenIn(l, counter, resultEnv)
+		result.Body[i] = freshenIn(l, counter, &resultEnv)
 	}
 	return result, resultEnv
 }
@@ -536,9 +654,8 @@ func (g *goal) resultForDependentChain(sg *subgoal, r result, d dependent) resul
 	dependentChain := g.chains[d.recieverID]
 	// This environment should map from the dependent's variables through to whatever got bound
 	denv := emptyEnvironment()
-
 	for k, v := range d.ClauseMapping {
-		denv.bindings[k] = r.env.chase(v)
+		denv.bind(k, r.env.chase(v))
 	}
 
 	var newL = denv.rewrite(dependentChain.body[0])
@@ -579,6 +696,7 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) re
 	for k, v := range d.ClauseMapping {
 		denv.bind(k, r.env.chase(v))
 	}
+
 	var newL = denv.rewrite(dependentSubgoal.Literal)
 
 	if !newL.allConstant() {
@@ -600,16 +718,14 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) re
 }
 
 func (g *goal) mergeResultIntoChain(chain *chain, r result) {
-	newEnv := emptyEnvironment()
 	// Rewrite a copy of the chain's starting environment
-	for k, v := range chain.env.bindings {
-		newEnv.bind(k, r.env.chase(v))
-	}
+	newEnv := rewritten(chain.env, r.env)
+
 	// Merge in the additions from the latest result; this includes
 	// variables seen for the first time in this chain's leading literal
-	for k, v := range r.env.bindings {
+	r.env.forEach(func(k int64, v Term) {
 		newEnv.bind(k, v)
-	}
+	})
 
 	// assert that len(chain.body) != 0 under any circumstances
 	if len(chain.body) == 1 {
@@ -629,8 +745,7 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 		for i, d := range chain.dependents {
 			newDependent := dependent{d.recieverID, map[int64]Term{}}
 			for k, v := range d.ClauseMapping {
-				bound := r.env.chase(v)
-				newDependent.ClauseMapping[k] = bound
+				newDependent.ClauseMapping[k] = r.env.chase(v)
 			}
 			newDependents[i] = newDependent
 		}
@@ -712,6 +827,8 @@ func (l Literal) allConstant() bool {
 func (g *goal) visitChain(chainId uuid.UUID) {
 	chain := g.chains[chainId]
 
+	// This violates an invariant of environments that is enforced when bind() is called --
+	// that we not map variables to themselves
 	cm := map[int64]Term{}
 	for _, t := range chain.body[0].Terms {
 		if !t.IsConstant {
@@ -775,7 +892,8 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	external := []ExternalRelation{}
 	g.db.clauseMutex.RLock()
 	for _, r := range g.db.externalRelations {
-		if ok, _ := unify(sg.Literal, r.head, emptyEnvironment()); ok {
+		match := emptyEnvironment()
+		if ok := unify(sg.Literal, r.head, &match); ok {
 			external = append(external, r)
 		}
 	}
@@ -790,11 +908,13 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	rules := []rule{}
 	// Check Clauses
 	g.db.clauseMutex.RLock()
+	match := emptyEnvironment()
 	for cid, c := range g.db.clauses {
+		match.reset()
 		// If it's a fact
 		if len(c.Body) == 0 {
-			if ok, env := unify(sg.Literal, c.Head, emptyEnvironment()); ok {
-				facts = append(facts, fact{cid, env})
+			if ok := unify(sg.Literal, c.Head, &match); ok {
+				facts = append(facts, fact{cid, match})
 			}
 			continue
 		}
@@ -803,18 +923,17 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 		// We need to freshen the subgoal literal because there might be variable name
 		// colisions between clauses, most directly when a clause recurses with itself.
 		freshEnv := emptyEnvironment()
-		fresh := g.freshenIn(sg.Literal, freshEnv)
+		fresh := g.freshenIn(sg.Literal, &freshEnv)
 
-		if ok, env := unify(fresh, c.Head, emptyEnvironment()); ok {
+		if ok := unify(fresh, c.Head, &match); ok {
 			// Some variable bindings may be made in unify against the head -- need to add those
 			// to the dependent bindings
-			for k, v := range freshEnv.bindings {
-				freshEnv.bindings[k] = env.chase(v)
-			}
+			freshEnv = rewritten(freshEnv, match)
+
 			rules = append(rules, rule{
 				cid:      cid,
 				c:        c,
-				env:      env,
+				env:      match,
 				freshEnv: freshEnv,
 			})
 		}
@@ -837,23 +956,20 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) {
 	}
 
 	for _, r := range rules {
+		cm := map[int64]Term{}
+		r.freshEnv.forEach(func(k int64, v Term) { cm[k] = v })
+
 		chainId, isNew := g.chain(
 			r.cid,
 			r.env,
 			r.c.Body,
-			[]dependent{dependent{subgoal, r.freshEnv.bindings}},
+			[]dependent{dependent{subgoal, cm}},
 			map[uuid.UUID]Literal{})
 		if isNew {
 			g.visitChain(chainId)
 		}
 	}
 
-}
-
-func emptyEnvironment() environment {
-	return environment{
-		bindings: make(map[int64]Term, 0),
-	}
 }
 
 func (db *Database) ask(l Literal) []result {

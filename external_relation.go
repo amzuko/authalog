@@ -28,7 +28,8 @@ func (g *goal) runExternalRule(sg *subgoal, rel ExternalRelation) {
 		// Unify with the target. Doing this allows us to generate an env,
 		// and make sure that any multiply-bound variables (eg, foo(A, B, A)?)
 		// unify correctly, without requiring that all external rules handle that logic.
-		ok, env := unify(r, sg.Literal, emptyEnvironment())
+		env := emptyEnvironment()
+		ok := unify(r, sg.Literal, &env)
 		if ok {
 			g.mergeResultIntoSubgoal(sg, result{
 				env:     env,
