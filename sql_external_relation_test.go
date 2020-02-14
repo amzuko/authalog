@@ -25,24 +25,6 @@ func setupDB(db *sql.DB) error {
 	return nil
 }
 
-type mockInterner struct {
-	// maps variables and string constants to ints
-	interned       map[string]int64
-	internedLookup map[int64]string
-}
-
-func (db *mockInterner) intern(str string) int64 {
-	if _, ok := db.interned[str]; !ok {
-		db.interned[str] = int64(len(db.interned))
-		db.internedLookup[db.interned[str]] = str
-	}
-	return db.interned[str]
-}
-
-func (db *mockInterner) lookup(v int64) string {
-	return db.internedLookup[v]
-}
-
 func TestExternalSQLRule(t *testing.T) {
 	os.Remove("test.db")
 	db, err := sql.Open("sqlite3", "./test.db")
@@ -65,10 +47,9 @@ func TestExternalSQLRule(t *testing.T) {
 		t.Error(err)
 	}
 
-	mi := mockInterner{map[string]int64{}, map[int64]string{}}
-
+	mi := NewDatabase()
 	// Check full enumeration
-	terms, err := relation.run(&mi, makeVars(2))
+	terms, err := relation.run(mi, makeVars(2))
 	if err != nil {
 		t.Error(err)
 	}
@@ -90,7 +71,7 @@ func TestExternalSQLRule(t *testing.T) {
 		IsConstant: true,
 		Value:      mi.intern("2"),
 	}
-	terms, err = relation.run(&mi, qTerms)
+	terms, err = relation.run(mi, qTerms)
 	if err != nil {
 		t.Error(err)
 	}
@@ -114,7 +95,7 @@ func TestExternalSQLRule(t *testing.T) {
 		IsConstant: true,
 		Value:      mi.intern("Quincy"),
 	}
-	terms, err = relation.run(&mi, qTerms)
+	terms, err = relation.run(mi, qTerms)
 	if err != nil {
 		t.Error(err)
 	}

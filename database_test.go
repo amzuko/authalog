@@ -162,6 +162,32 @@ permit(will, fetch, rams_couch).
 		expected: `baz(b).
 `,
 	},
+	pCase{
+		name: "inSet",
+		prog: `foo(A) :-
+				A in [a, b, c].
+				foo(a)?`,
+		expected: `foo(a).
+`,
+	},
+	pCase{
+		name: "inSet-enumerate",
+		prog: `foo(A) :-
+				A in [a, b, c].
+				foo(X)?`,
+		expected: `foo(a).
+foo(b).
+foo(c).
+`,
+	},
+	pCase{
+		name: "inSet-enumerate",
+		prog: `foo():-
+			!d in [a, b, c].
+			foo?`,
+		expected: `foo.
+`,
+	},
 	// 	pCase{
 	// 		name: "retraction",
 	// 		prog: `foo(a,b).

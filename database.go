@@ -30,8 +30,10 @@ type Database struct {
 	// Used to freshen all stored clauses, so that there are no name collisions between scopes
 	vars int64
 	// maps variables and string constants to ints
+	internCount    int64
 	interned       map[string]int64
 	internedLookup map[int64]string
+	setLookup      map[int64]groundSet
 }
 
 func NewDatabase() *Database {
@@ -44,7 +46,10 @@ func NewDatabase() *Database {
 		vars:              0,
 		interned:          map[string]int64{},
 		internedLookup:    map[int64]string{},
+		setLookup:         map[int64]groundSet{},
 	}
+	// Builtin in/2 relation
+	d.AddExternalRelations(isIn)
 	return &d
 }
 

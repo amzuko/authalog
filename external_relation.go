@@ -3,8 +3,16 @@ package authalog
 import "fmt"
 
 type interner interface {
+	// Interns a string. Multiple calls with the same string value will
+	// return the same int64b
 	intern(str string) int64
+	// Looks up a string
 	lookup(value int64) string
+	// Stores a set. Unlike interning a string, there is no garuntee identical
+	// sets will be iven the same id
+	storeSet(s groundSet) int64
+	// Gets a set
+	getSet(value int64) groundSet
 }
 
 type ExternalRelation struct {

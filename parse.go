@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -124,10 +125,12 @@ func (s scanner) scanIdentifier() (str string, isAtom bool, err error) {
 	}
 }
 
+// TODO lock??
 func (db *Database) intern(str string) int64 {
 	if _, ok := db.interned[str]; !ok {
-		db.interned[str] = int64(len(db.interned))
-		db.internedLookup[db.interned[str]] = str
+		db.interned[str] = db.internCount
+		db.internedLookup[db.internCount] = str
+		db.internCount++
 	}
 	return db.interned[str]
 }
@@ -136,14 +139,30 @@ func (db *Database) lookup(v int64) string {
 	return db.internedLookup[v]
 }
 
-func (s scanner) scanTerm() (t Term, err error) {
+func (db *Database) storeSet(s groundSet) int64 {
+	db.setLookup[db.internCount] = s
+	db.internCount++
+	return db.internCount - 1
+}
 
+func (db *Database) getSet(v int64) groundSet {
+	if s, ok := db.setLookup[v]; ok {
+		return s
+	}
+	panic("Set not found. This should never happen")
+}
+
+func (s scanner) scanTerm() (t Term, err error) {
 	id, isAtom, err := s.scanIdentifier()
 
 	if err != nil {
 		return t, err
 	}
 
+	return s.makeTerm(id, isAtom), nil
+}
+
+func (s scanner) makeTerm(id string, isAtom bool) (t Term) {
 	leading, _ := utf8.DecodeRuneInString(id)
 
 	t.Value = s.db.intern(id)
@@ -151,6 +170,80 @@ func (s scanner) scanTerm() (t Term, err error) {
 		t.IsConstant = true
 	}
 	return
+}
+
+// the preliminary literal comes over carrying a variable name in
+func (s scanner) scanInSet(negated bool, leading string, isAtom bool) (lit Literal, err error) {
+	err = s.mustConsume('i')
+	if err != nil {
+		return
+	}
+	err = s.mustConsume('n')
+	if err != nil {
+		return
+	}
+	s.consumeWhitespace()
+	err = s.mustConsume('[')
+	if err != nil {
+		return
+	}
+	var r rune
+	var t Term
+	vals := []int64{}
+	for {
+		s.consumeWhitespace()
+		r, _, err = s.r.ReadRune()
+		if err != nil {
+			return
+		}
+		if r == ']' {
+			break
+		} else {
+			err = s.r.UnreadRune()
+			if err != nil {
+				return
+			}
+		}
+
+		t, err = s.scanTerm()
+		if err != nil {
+			return
+		}
+		if !t.IsConstant {
+			return lit, fmt.Errorf("Only constant terms allowed in sets, got: %v", s.db.lookup(t.Value))
+		}
+		vals = append(vals, t.Value)
+
+		s.consumeWhitespace()
+		// Consume an optional comma
+		// TODO make commas non optional?
+
+		r, _, err = s.r.ReadRune()
+		if err != nil {
+			return
+		}
+		if r != ',' {
+			err = s.r.UnreadRune()
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	sort.Slice(vals, func(i, j int) bool { return vals[i] < vals[j] })
+	sVal := s.db.storeSet(groundSet{vals})
+
+	// Reconstitute a literal
+	lit.Negated = negated
+	lit.Predicate = "in"
+	lit.Terms = []Term{
+		s.makeTerm(leading, isAtom),
+		Term{
+			IsConstant: true,
+			Value:      sVal,
+		},
+	}
+	return lit, nil
 }
 
 func (s scanner) scanLiteral() (lit Literal, err error) {
@@ -166,7 +259,7 @@ func (s scanner) scanLiteral() (lit Literal, err error) {
 		s.r.UnreadRune()
 	}
 
-	name, _, err := s.scanIdentifier()
+	name, isAtom, err := s.scanIdentifier()
 	if err != nil {
 		return
 	}
@@ -175,7 +268,6 @@ func (s scanner) scanLiteral() (lit Literal, err error) {
 		Negated:   negated,
 		Predicate: name,
 	}
-
 	s.consumeWhitespace()
 
 	// We might have  a 0-arity Literal, so check if we have a period, and return if so.
@@ -188,11 +280,26 @@ func (s scanner) scanLiteral() (lit Literal, err error) {
 	if isTerminal(ch) {
 		return
 	}
+	// If it's a 'i', we are in a 'A in {}' expression
+	if ch == 'i' {
+		l, e := s.scanInSet(negated, name, isAtom)
+		return l, e
+	}
 
 	err = s.mustConsume('(')
 	if err != nil {
 		return
 	}
+	// Check if its a zero-arity
+	ch, _, err = s.r.ReadRune()
+	if err != nil {
+		return lit, err
+	}
+	// ')' closes the Literal
+	if ch == ')' {
+		return
+	}
+	s.r.UnreadRune()
 	for {
 		s.consumeWhitespace()
 
