@@ -76,7 +76,7 @@ func (db *Database) Apply(cmd Command) ([]result, error) {
 		}
 		c = preprocess(c)
 
-		db.assert(c)
+		db.Assert(c)
 		return nil, nil
 	case CommandQuery:
 		res := db.ask(cmd.Head)

@@ -18,18 +18,15 @@ Concurrent use of database
     Snapshots for consistent querying?
 
 A in [] syntax
-    parse, store sets
-    call in predicate
-    static checks so that in() never called directly
-const sets
-
-Easier switching based on constants:
-foo(A, B) :-
-    A in ['my', 'constants', 'are', 'awesome'],
-    bar(A, B).
-
+    static checks so that in() never called directly or overridden
+    update termstring to handle static sets
 
 Allow for don't care variables in clause heads?
 
-Profiling of execution -- what clauses at the most time?
+Profiling of execution -- what clauses eat the most time?
 
+Testing -- for the projectID, want to test that each resource type can be bound at least once
+
+In db.Literal, keep track of types of args. Then, walk all clauses and look for consistency.
+
+Don't cares

@@ -180,7 +180,7 @@ func (db *Database) ask(l Literal) []result {
 	return results
 }
 
-func (db *Database) assert(c Clause) {
+func (db *Database) Assert(c Clause) {
 	db.internMutex.Lock()
 	db.clauseMutex.Lock()
 	defer db.internMutex.Unlock()

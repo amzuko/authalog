@@ -116,7 +116,7 @@ func NewRBACAuthorizer(db *sql.DB) (*RBACAuthorizer, error) {
 }
 
 func (rbac *RBACAuthorizer) Check(user int, action Action, resource int) (bool, error) {
-	l := rbac.db.Literal("checkResource", user, action, resource)
+	l := rbac.db.L("checkResource", user, action, resource)
 	results, err := rbac.db.Apply(
 		authalog.Ask(l))
 	return len(results) != 0, err
@@ -125,12 +125,12 @@ func (rbac *RBACAuthorizer) Check(user int, action Action, resource int) (bool, 
 func (rbac *RBACAuthorizer) CheckResourceType(user int, action Action, resourceType ResourceType) (bool, error) {
 	results, err := rbac.db.Apply(
 		authalog.Ask(
-			rbac.db.Literal("checkResourceType", user, action, resourceType)))
+			rbac.db.L("checkResourceType", user, action, resourceType)))
 	return len(results) != 0, err
 }
 
 func (rbac *RBACAuthorizer) Proof(user int, action Action, resource int) (string, error) {
-	l := rbac.db.Literal("checkResource", user, action, resource)
+	l := rbac.db.L("checkResource", user, action, resource)
 	results, err := rbac.db.Apply(
 		authalog.Ask(l))
 	if err != nil {

@@ -471,8 +471,15 @@ type vardef struct {
 	name string
 }
 
-func Var(s string) interface{} {
+func V(s string) interface{} {
 	return vardef{s}
+}
+
+func C(head Literal, body ...Literal) Clause {
+	return Clause{
+		Head: head,
+		Body: body,
+	}
 }
 
 func Ask(l Literal) Command {
@@ -489,21 +496,47 @@ func Assert(l Literal) Command {
 	}
 }
 
-func (db *Database) Literal(predicate string, terms ...interface{}) Literal {
+func (db *Database) termFromInterface(t interface{}) Term {
+	switch t.(type) {
+	case vardef:
+		return Term{
+			IsConstant: false,
+			Value:      db.intern(t.(vardef).name),
+		}
+	default:
+		return Term{
+			IsConstant: true,
+			Value:      db.intern(fmt.Sprint(t)),
+		}
+	}
+}
+
+func (db *Database) InSet(item interface{}, set ...interface{}) Literal {
+
+	vals := []int64{}
+
+	for _, s := range set {
+		st := db.termFromInterface(s)
+		if !st.IsConstant {
+			// TODO: is there a better way?
+			panic("Only pass constant terms to InSet's set")
+		}
+		vals = append(vals, st.Value)
+	}
+
+	sort.Slice(vals, func(i, j int) bool { return vals[i] < vals[j] })
+	sVal := db.storeSet(groundSet{vals})
+
+	return Literal{
+		Predicate: "in",
+		Terms:     []Term{db.termFromInterface(item), Term{IsConstant: true, Value: sVal}},
+	}
+}
+
+func (db *Database) L(predicate string, terms ...interface{}) Literal {
 	ts := make([]Term, len(terms))
 	for i, v := range terms {
-		switch v.(type) {
-		case vardef:
-			ts[i] = Term{
-				IsConstant: false,
-				Value:      db.intern(v.(vardef).name),
-			}
-		default:
-			ts[i] = Term{
-				IsConstant: true,
-				Value:      db.intern(fmt.Sprint(v)),
-			}
-		}
+		ts[i] = db.termFromInterface(v)
 	}
 	return Literal{
 		Predicate: predicate,
