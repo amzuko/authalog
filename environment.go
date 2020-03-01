@@ -65,7 +65,7 @@ func (e *environment) chase(t Term) Term {
 		return t
 	}
 
-	for i := 0; i < e.count; i++ {
+	for i := 0; i < e.count && i < ENV_FIXED_LENGTH; i++ {
 		b := e.bindings[i]
 		if b.k == t.Value {
 			return b.v
@@ -83,7 +83,7 @@ func (e *environment) bind(id int64, t Term) {
 	if !t.IsConstant && id == t.Value {
 		panic(fmt.Sprintf("Binding variable to itself: %v", t.Value))
 	}
-	for i := 0; i < e.count; i++ {
+	for i := 0; i < e.count && i < ENV_FIXED_LENGTH; i++ {
 		b := e.bindings[i]
 		if b.k == id {
 			panic(fmt.Sprintf("Cannot rebind variables: %v. old: %v new : %v", id, b.v, t))

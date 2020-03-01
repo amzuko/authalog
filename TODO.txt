@@ -9,6 +9,7 @@ Static errors
     Negation inside recursion
     Calling relations with wrong # of arguments
     Calling non existent relations
+    Variable bound in head but only bound in negated body literal
 Docstring comments on rules
 Web UI for interacting with db
 Pass errors up through querying
@@ -20,8 +21,10 @@ Concurrent use of database
 A in [] syntax
     static checks so that in() never called directly or overridden
     update termstring to handle static sets
+    Is there 
 
 Allow for don't care variables in clause heads?
+    What if we only match clauses to queries when there are ground terms in the DC slots?
 
 Profiling of execution -- what clauses eat the most time?
 
@@ -29,4 +32,8 @@ Testing -- for the projectID, want to test that each resource type can be bound 
 
 In db.Literal, keep track of types of args. Then, walk all clauses and look for consistency.
 
-Don't cares
+Don't cares -- in Assert(), rewrite "_" variables
+
+A "table" helper function
+
+

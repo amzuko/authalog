@@ -188,6 +188,27 @@ foo(c).
 		expected: `foo.
 `,
 	},
+	pCase{
+		name: "manyVars",
+		prog: `
+foo(a).
+bar(A, B, C, D, E, F, G, H, I, J, K) :-
+	foo(A),
+	foo(B),
+	foo(C),
+	foo(D),
+	foo(E),
+	foo(F),
+	foo(G),
+	foo(H),
+	foo(I),
+	foo(J),
+	foo(K).
+bar(A, B, C, D, E, F, G, H, I, J, K)?
+`,
+		expected: `bar(a, a, a, a, a, a, a, a, a, a, a).
+`,
+	},
 	// 	pCase{
 	// 		name: "retraction",
 	// 		prog: `foo(a,b).

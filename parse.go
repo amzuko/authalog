@@ -496,6 +496,11 @@ func Assert(l Literal) Command {
 	}
 }
 
+func Negate(l Literal) Literal {
+	l.Negated = true
+	return l
+}
+
 func (db *Database) termFromInterface(t interface{}) Term {
 	switch t.(type) {
 	case vardef:

@@ -29,7 +29,7 @@ type ExternalRelation struct {
 func (g *goal) runExternalRule(sg *subgoal, rel ExternalRelation) {
 	tuples, err := rel.run(g.db, sg.Literal.Terms)
 	if err != nil {
-		panic(fmt.Sprintf("got error: %v", err))
+		panic(fmt.Sprintf("In %v, got error: %v", rel.head, err))
 	}
 	for _, tuple := range tuples {
 		r := Literal{Predicate: sg.Literal.Predicate, Terms: tuple}
