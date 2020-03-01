@@ -35,7 +35,7 @@ func sqlQueryForTerms(intern interner, spec SQLExternalRelationSpec, terms []Ter
 				if whered > 0 {
 					query = query + " AND "
 				}
-				query = query + fmt.Sprintf("%s = $%d", spec.Columns[i], whered)
+				query = query + fmt.Sprintf("%s = $%d", spec.Columns[i], whered+1)
 
 				str := intern.lookup(t.Value)
 				switch spec.Types[i].(type) {
@@ -72,7 +72,7 @@ func CreateSQLExternalRelation(spec SQLExternalRelationSpec, db *sql.DB) (Extern
 
 	// Vet the relation
 	if len(spec.Columns) != len(spec.Types) {
-		return ExternalRelation{}, fmt.Errorf("Mismatch in # of columns (%v) and data types(%v)", len(spec.Columns), len(spec.Types))
+		return ExternalRelation{}, fmt.Errorf("For %v, Mismatch in # of columns (%v) and data types(%v)", spec.Table, len(spec.Columns), len(spec.Types))
 	}
 
 	rt := make([]reflect.Type, len(spec.Types))
@@ -92,19 +92,21 @@ func CreateSQLExternalRelation(spec SQLExternalRelationSpec, db *sql.DB) (Extern
 
 		var results [][]Term
 
-		destination := make([]interface{}, len(rt))
-		destinationPointers := make([]interface{}, len(destination))
+		destinationPointers := make([]interface{}, len(rt))
 		for i, v := range rt {
-			destination[i] = reflect.New(v).Elem().Interface()
-			destinationPointers[i] = &destination[i]
+			e := reflect.New(v).Interface()
+			destinationPointers[i] = e
 		}
 		for rows.Next() {
-			rows.Scan(destinationPointers...)
+			err := rows.Scan(destinationPointers...)
+			if err != nil {
+				return nil, err
+			}
 
-			r := make([]Term, len(destination))
-			for i, d := range destination {
+			r := make([]Term, len(destinationPointers))
+			for i, dp := range destinationPointers {
 				var stringValue string
-				asT := reflect.ValueOf(d).Convert(rt[i]).Interface()
+				asT := reflect.ValueOf(dp).Elem().Convert(rt[i]).Interface()
 
 				stringValue = fmt.Sprint(asT)
 
