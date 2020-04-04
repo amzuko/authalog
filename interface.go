@@ -70,14 +70,7 @@ func (db *Database) Apply(cmd Command) ([]result, error) {
 			Head: cmd.Head,
 			Body: cmd.Body,
 		}
-		err := db.checkClause(c)
-		if err != nil {
-			return nil, err
-		}
-		c = preprocess(c)
-
-		db.Assert(c)
-		return nil, nil
+		return nil, db.Assert(c)
 	case CommandQuery:
 		res := db.ask(cmd.Head)
 		return res, nil

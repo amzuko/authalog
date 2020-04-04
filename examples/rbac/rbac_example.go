@@ -65,7 +65,7 @@ allowed('Writer', 'Delete', 'Post').
 
 % Admins can do everything writers can, plus edit and delete comments.
 allowed('Admin', Action, ResourceType) :-
-	allowed('Writer', Action, ResourceType).
+allowed('Writer', Action, ResourceType).
 allowed('Writer', 'Edit', 'Comment').
 allowed('Writer', 'Delete', 'Comment').
 `

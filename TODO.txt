@@ -4,6 +4,7 @@ Cache invalidation
     Invalidate on asserting new clauses / facts
     Invalidate on retracting things
 Static errors
+    Check on db.Asset()
     Track parse position
     Feed back along with errors
     Negation inside recursion
@@ -11,12 +12,13 @@ Static errors
     Calling non existent relations
     Variable bound in head but only bound in negated body literal
 Docstring comments on rules
-Web UI for interacting with db
 Pass errors up through querying
 Make sure columns and so forth exist in sql schema when creatin sql external relations
 
 Concurrent use of database
     Snapshots for consistent querying?
+
+Parse a nil thing and consistently use it for nil pointers
 
 A in [] syntax
     static checks so that in() never called directly or overridden
@@ -31,8 +33,6 @@ Profiling of execution -- what clauses eat the most time?
 Testing -- for the projectID, want to test that each resource type can be bound at least once
 
 In db.Literal, keep track of types of args. Then, walk all clauses and look for consistency.
-
-Don't cares -- in Assert(), rewrite "_" variables
 
 A "table" helper function
 

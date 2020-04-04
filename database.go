@@ -180,7 +180,13 @@ func (db *Database) ask(l Literal) []result {
 	return results
 }
 
-func (db *Database) Assert(c Clause) {
+func (db *Database) Assert(c Clause) error {
+	err := db.checkClause(c)
+	if err != nil {
+		return err
+	}
+	c = preprocess(c)
+
 	db.internMutex.Lock()
 	db.clauseMutex.Lock()
 	defer db.internMutex.Unlock()
@@ -188,4 +194,5 @@ func (db *Database) Assert(c Clause) {
 	fresh, _ := freshen(c, &db.vars)
 	id := fresh.id()
 	db.clauses[id] = fresh
+	return nil
 }

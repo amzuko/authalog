@@ -72,7 +72,7 @@ func dependentsEqual(a dependent, b dependent) bool {
 	return true
 }
 
-func (g *goal) addDependentToChain(chain *chain, additionaDependents []dependent) {
+func (g *goal) addDependentToChain(chain *chain, additionaDependents []dependent) error {
 	for _, d := range additionaDependents {
 		notNew := false
 		for _, v := range chain.dependents {
@@ -88,7 +88,7 @@ func (g *goal) addDependentToChain(chain *chain, additionaDependents []dependent
 					newDependent.ClauseMapping[k] = rn.result.env.chase(v)
 				}
 				if rn.next == uuid.Nil {
-					r := g.resultForDependentSubgoal(chain, rn.result, newDependent)
+					r, err := g.resultForDependentSubgoal(chain, rn.result, newDependent)
 					g.mergeResultIntoSubgoal(g.subgoals[newDependent.recieverID], r)
 				} else {
 
@@ -281,7 +281,7 @@ func chainHash(ClauseID uuid.UUID, body []Literal, env environment) uuid.UUID {
 	return idFromInts(hasher.Sum128())
 }
 
-func (g *goal) resultForDependentChain(sg *subgoal, r result, d dependent) result {
+func (g *goal) resultForDependentChain(sg *subgohal, r result, d dependent) (result, error) {
 	dependentChain := g.chains[d.recieverID]
 	// This environment should map from the dependent's variables through to whatever got bound
 	denv := emptyEnvironment()
@@ -302,7 +302,7 @@ func (g *goal) resultForDependentChain(sg *subgoal, r result, d dependent) resul
 	}
 }
 
-func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) result {
+func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) (result, error) {
 	dependentSubgoal := g.subgoals[d.recieverID]
 
 	newInvalidators := map[uuid.UUID]Literal{}
@@ -348,7 +348,7 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) re
 	}
 }
 
-func (g *goal) mergeResultIntoChain(chain *chain, r result) {
+func (g *goal) mergeResultIntoChain(chain *chain, r result) error {
 	// Rewrite a copy of the chain's starting environment
 	newEnv := rewritten(chain.env, r.env)
 
@@ -398,7 +398,7 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) {
 	}
 }
 
-func (g *goal) mergeResultIntoSubgoal(sg *subgoal, r result) {
+func (g *goal) mergeResultIntoSubgoal(sg *subgoal, r result) error {
 	trace("Merging", r.Literal, "into", sg.Literal)
 
 	for k, v := range r.invalidators {
@@ -429,7 +429,7 @@ func (l Literal) allConstant() bool {
 	return true
 }
 
-func (g *goal) visitChain(chainId uuid.UUID) {
+func (g *goal) visitChain(chainId uuid.UUID) error {
 	chain := g.chains[chainId]
 
 	// This violates an invariant of environments that is enforced when bind() is called --
@@ -472,7 +472,7 @@ type rule struct {
 	freshEnv environment
 }
 
-func (g *goal) visitSubgoal(subgoal uuid.UUID) {
+func (g *goal) visitSubgoal(subgoal uuid.UUID) error {
 	sg := g.subgoals[subgoal]
 	trace("visiting", sg.Literal)
 	if sg.Literal.Negated {

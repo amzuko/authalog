@@ -127,6 +127,13 @@ func (s scanner) scanIdentifier() (str string, isAtom bool, err error) {
 
 // TODO lock??
 func (db *Database) intern(str string) int64 {
+	// Always give a fresh value for don't cares
+	if str == "_" {
+		v := db.internCount
+		db.internedLookup[v] = "_"
+		db.internCount++
+		return v
+	}
 	if _, ok := db.interned[str]; !ok {
 		db.interned[str] = db.internCount
 		db.internedLookup[db.internCount] = str
