@@ -139,7 +139,7 @@ func (g *goal) addDependent(sg *subgoal, additionalDependents []dependent) error
 	return nil
 }
 
-func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additionalDependents []dependent, invalidators map[uuid.UUID]Literal) (uuid.UUID, bool) {
+func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additionalDependents []dependent, invalidators map[uuid.UUID]Literal) (uuid.UUID, bool, error) {
 	isNew := false
 
 	newBody := make([]Literal, len(body))
@@ -174,7 +174,10 @@ func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additi
 			c.invalidators[k] = v
 		}
 
-		g.addDependentToChain(c, newDependents)
+		err := g.addDependentToChain(c, newDependents)
+		if err != nil {
+			return id, isNew, err
+		}
 	} else {
 		isNew = true
 		c := chain{
@@ -192,7 +195,7 @@ func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additi
 		g.chains[id] = &c
 	}
 
-	return id, isNew
+	return id, isNew, nil
 }
 
 func (g *goal) putSubgoal(l Literal, env environment, additionalDependents []dependent) (uuid.UUID, bool) {
@@ -398,7 +401,10 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) error {
 			newDependents[i] = newDependent
 		}
 
-		next, isNew := g.chain(chain.clauseId, newEnv, chain.body[1:], newDependents, chain.invalidators)
+		next, isNew, err := g.chain(chain.clauseId, newEnv, chain.body[1:], newDependents, chain.invalidators)
+		if err != nil {
+			return err
+		}
 		chain.results[r.Literal.id()] = resultNext{result: r, next: next}
 		if isNew {
 			g.visitChain(next)
@@ -598,12 +604,15 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) error {
 		cm := map[int64]Term{}
 		r.freshEnv.forEach(func(k int64, v Term) { cm[k] = v })
 
-		chainId, isNew := g.chain(
+		chainId, isNew, err := g.chain(
 			r.cid,
 			r.env,
 			r.c.Body,
 			[]dependent{dependent{subgoal, cm}},
 			map[uuid.UUID]Literal{})
+		if err != nil {
+			return err
+		}
 		if isNew {
 			err := g.visitChain(chainId)
 			if err != nil {

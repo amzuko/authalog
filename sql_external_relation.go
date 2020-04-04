@@ -17,7 +17,7 @@ type SQLExternalRelationSpec struct {
 	Types []interface{}
 }
 
-func sqlQueryForTerms(intern interner, spec SQLExternalRelationSpec, terms []Term) (string, []interface{}) {
+func sqlQueryForTerms(intern interner, spec SQLExternalRelationSpec, terms []Term) (string, []interface{}, error) {
 	query := fmt.Sprintf(`SELECT %s FROM %s`, strings.Join(spec.Columns, ", "), spec.Table)
 
 	hasWhere := false
@@ -44,8 +44,25 @@ func sqlQueryForTerms(intern interner, spec SQLExternalRelationSpec, terms []Ter
 				case int:
 					// TODO should we parse it
 					args = append(args, str)
+				case bool:
+					// TODO: parse and validate?
+					if strings.ToLower(str) == "true" {
+						args = append(args, true)
+					} else {
+						args = append(args, false)
+					}
 				default:
-					v := reflect.New(reflect.TypeOf(spec.Types[i]))
+					to := reflect.TypeOf(spec.Types[i])
+					// Convert pointers to their element types when we're serializing, because the .Scan() interface
+					// isn't implemented on pointers.
+					if to.Kind() == reflect.Ptr {
+						to = to.Elem()
+					}
+					v := reflect.New(to)
+					mv := v.MethodByName("Scan")
+					if !mv.IsValid() {
+						return "", nil, fmt.Errorf("Cannot find scan method on %v for string %v", spec.Types[i], str)
+					}
 					_ = v.MethodByName("Scan").Call([]reflect.Value{reflect.ValueOf(str)})
 					args = append(args, v.Interface())
 				}
@@ -57,7 +74,7 @@ func sqlQueryForTerms(intern interner, spec SQLExternalRelationSpec, terms []Ter
 	query = query + ";"
 
 	trace("Query", query, "Args", args)
-	return query, args
+	return query, args, nil
 }
 
 func makeVars(n int) []Term {
@@ -80,7 +97,10 @@ func CreateSQLExternalRelation(spec SQLExternalRelationSpec, db *sql.DB) (Extern
 		rt[i] = reflect.TypeOf(t)
 	}
 	runner := func(in interner, terms []Term) ([][]Term, error) {
-		q, args := sqlQueryForTerms(in, spec, terms)
+		q, args, err := sqlQueryForTerms(in, spec, terms)
+		if err != nil {
+			return nil, err
+		}
 		rows, err := db.Query(q, args...)
 		if err == sql.ErrNoRows {
 			return [][]Term{}, nil
