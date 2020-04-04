@@ -34,6 +34,9 @@ Testing -- for the projectID, want to test that each resource type can be bound 
 
 In db.Literal, keep track of types of args. Then, walk all clauses and look for consistency.
 
-A "table" helper function
+A "table" helper function for construction rlations from a table
+
+
+If we return an error from searching, what is the state of the cache?
 
 

@@ -26,10 +26,10 @@ type ExternalRelation struct {
 	run func(interner, []Term) ([][]Term, error)
 }
 
-func (g *goal) runExternalRule(sg *subgoal, rel ExternalRelation) {
+func (g *goal) runExternalRule(sg *subgoal, rel ExternalRelation) error {
 	tuples, err := rel.run(g.db, sg.Literal.Terms)
 	if err != nil {
-		panic(fmt.Sprintf("In %v, got error: %v", rel.head, err))
+		return fmt.Errorf("In %v, got error: %v", rel.head, err)
 	}
 	for _, tuple := range tuples {
 		r := Literal{Predicate: sg.Literal.Predicate, Terms: tuple}
@@ -48,4 +48,5 @@ func (g *goal) runExternalRule(sg *subgoal, rel ExternalRelation) {
 			trace("Did not unify", r, "into", sg.Literal)
 		}
 	}
+	return nil
 }

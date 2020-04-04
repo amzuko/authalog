@@ -89,21 +89,31 @@ func (g *goal) addDependentToChain(chain *chain, additionaDependents []dependent
 				}
 				if rn.next == uuid.Nil {
 					r, err := g.resultForDependentSubgoal(chain, rn.result, newDependent)
-					g.mergeResultIntoSubgoal(g.subgoals[newDependent.recieverID], r)
+					if err != nil {
+						return err
+					}
+					err = g.mergeResultIntoSubgoal(g.subgoals[newDependent.recieverID], r)
+					if err != nil {
+						return err
+					}
 				} else {
 
 					nextchain, ok := g.chains[rn.next]
 					if !ok {
-						panic("not a valid chain")
+						return fmt.Errorf("not a valid chain: %v", rn.next)
 					}
-					g.addDependentToChain(nextchain, []dependent{newDependent})
+					err := g.addDependentToChain(nextchain, []dependent{newDependent})
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
 	}
+	return nil
 }
 
-func (g *goal) addDependent(sg *subgoal, additionalDependents []dependent) {
+func (g *goal) addDependent(sg *subgoal, additionalDependents []dependent) error {
 	for _, d := range additionalDependents {
 		notNew := false
 		for _, v := range sg.dependents {
@@ -119,10 +129,14 @@ func (g *goal) addDependent(sg *subgoal, additionalDependents []dependent) {
 				// No further chained subgoals, pass the result back into the new dependent
 				dresult := g.resultForDependentChain(sg, r, d)
 				chain := g.chains[d.recieverID]
-				g.mergeResultIntoChain(chain, dresult)
+				err := g.mergeResultIntoChain(chain, dresult)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
+	return nil
 }
 
 func (g *goal) chain(clauseID uuid.UUID, env environment, body []Literal, additionalDependents []dependent, invalidators map[uuid.UUID]Literal) (uuid.UUID, bool) {
@@ -281,7 +295,7 @@ func chainHash(ClauseID uuid.UUID, body []Literal, env environment) uuid.UUID {
 	return idFromInts(hasher.Sum128())
 }
 
-func (g *goal) resultForDependentChain(sg *subgohal, r result, d dependent) (result, error) {
+func (g *goal) resultForDependentChain(sg *subgoal, r result, d dependent) result {
 	dependentChain := g.chains[d.recieverID]
 	// This environment should map from the dependent's variables through to whatever got bound
 	denv := emptyEnvironment()
@@ -319,7 +333,7 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) (r
 		return result{
 			isFailure:    true,
 			invalidators: newInvalidators,
-		}
+		}, nil
 	}
 
 	// This environment should map from the dependent's variables through to whatever got bound
@@ -331,7 +345,7 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) (r
 	var newL = denv.rewrite(dependentSubgoal.Literal)
 
 	if !newL.allConstant() {
-		panic(fmt.Sprint("Generated a non-constant result for subgoal", dependentSubgoal.Literal, "->", newL))
+		return result{}, fmt.Errorf("Generated a non-constant result for subgoal %v -> %v", dependentSubgoal.Literal, newL)
 	}
 
 	return result{
@@ -345,7 +359,7 @@ func (g *goal) resultForDependentSubgoal(chain *chain, r result, d dependent) (r
 			substitutions: r.env,
 		},
 		invalidators: newInvalidators,
-	}
+	}, nil
 }
 
 func (g *goal) mergeResultIntoChain(chain *chain, r result) error {
@@ -363,10 +377,13 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) error {
 		r.env = newEnv
 		chain.results[r.Literal.id()] = resultNext{r, uuid.Nil}
 		for _, d := range chain.dependents {
-			dependentResult := g.resultForDependentSubgoal(chain, r, d)
+			dependentResult, err := g.resultForDependentSubgoal(chain, r, d)
+			if err != nil {
+				return err
+			}
 			g.mergeResultIntoSubgoal(g.subgoals[d.recieverID], dependentResult)
 		}
-		return
+		return nil
 	}
 
 	if (!chain.body[0].Negated && !r.isFailure) ||
@@ -390,12 +407,16 @@ func (g *goal) mergeResultIntoChain(chain *chain, r result) error {
 		// Failure -- fire the dependents
 		for _, d := range chain.dependents {
 			sg := g.subgoals[d.recieverID]
-			g.mergeResultIntoSubgoal(sg, result{
+			err := g.mergeResultIntoSubgoal(sg, result{
 				isFailure:    true,
 				invalidators: r.invalidators,
 			})
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 func (g *goal) mergeResultIntoSubgoal(sg *subgoal, r result) error {
@@ -405,7 +426,7 @@ func (g *goal) mergeResultIntoSubgoal(sg *subgoal, r result) error {
 		sg.invalidators[k] = v
 	}
 	if r.isFailure {
-		return
+		return nil
 	}
 
 	if _, ok := sg.results[r.Literal.id()]; !ok {
@@ -415,9 +436,13 @@ func (g *goal) mergeResultIntoSubgoal(sg *subgoal, r result) error {
 		// Trigger dependents
 		for _, d := range sg.dependents {
 			dresult := g.resultForDependentChain(sg, r, d)
-			g.mergeResultIntoChain(g.chains[d.recieverID], dresult)
+			err := g.mergeResultIntoChain(g.chains[d.recieverID], dresult)
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 func (l Literal) allConstant() bool {
@@ -451,10 +476,10 @@ func (g *goal) visitChain(chainId uuid.UUID) error {
 	// then signal
 	for _, rn := range chain.results {
 		if !rn.result.isFailure {
-			return
+			return nil
 		}
 	}
-	g.mergeResultIntoChain(chain, result{
+	return g.mergeResultIntoChain(chain, result{
 		isFailure: true,
 	})
 }
@@ -476,7 +501,7 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) error {
 	sg := g.subgoals[subgoal]
 	trace("visiting", sg.Literal)
 	if sg.Literal.Negated {
-		panic(fmt.Sprintf("Visiting negated subgoal: %v. All subgoals should be in positive form.", sg.Literal))
+		return fmt.Errorf("Visiting negated subgoal: %v. All subgoals should be in positive form.", sg.Literal)
 	}
 	// Check whether or not the database has attempted this subgoal.
 	// TODO: we should be able to store failure as well?
@@ -487,9 +512,12 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) error {
 	if ok {
 		trace("Found results")
 		for _, r := range results {
-			g.mergeResultIntoSubgoal(sg, r)
+			err := g.mergeResultIntoSubgoal(sg, r)
+			if err != nil {
+				return err
+			}
 		}
-		return
+		return nil
 	}
 
 	// Check external relations
@@ -506,7 +534,10 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) error {
 
 	for _, r := range external {
 		trace("Matched external relation", r.head)
-		g.runExternalRule(sg, r)
+		err := g.runExternalRule(sg, r)
+		if err != nil {
+			return err
+		}
 	}
 
 	facts := []fact{}
@@ -557,7 +588,10 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) error {
 				substitutions: f.env,
 			},
 		}
-		g.mergeResultIntoSubgoal(sg, r)
+		err := g.mergeResultIntoSubgoal(sg, r)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, r := range rules {
@@ -571,8 +605,11 @@ func (g *goal) visitSubgoal(subgoal uuid.UUID) error {
 			[]dependent{dependent{subgoal, cm}},
 			map[uuid.UUID]Literal{})
 		if isNew {
-			g.visitChain(chainId)
+			err := g.visitChain(chainId)
+			if err != nil {
+				return err
+			}
 		}
 	}
-
+	return nil
 }
