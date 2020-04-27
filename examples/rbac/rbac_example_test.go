@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	. "github.com/amzuko/authalog/examples/constants"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -48,10 +49,7 @@ func setupDB(db *sql.DB) error {
 	(24, 11, 5),
 	(25, 13, 1);
 `)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func truthy(t *testing.T) func(bool, error) {

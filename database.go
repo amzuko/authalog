@@ -94,6 +94,14 @@ func (c Clause) id() uuid.UUID {
 	return idFromInts(hasher.Sum128())
 }
 
+func hashIDs(ids []uuid.UUID) uuid.UUID {
+	hasher := murmur3.New128()
+	for _, v := range ids {
+		hasher.Write(v.Bytes())
+	}
+	return idFromInts(hasher.Sum128())
+}
+
 // This is a tag. two Literals have the same id() if there exists a variable renaming
 // wherein they are identical.
 func (l Literal) id() uuid.UUID {

@@ -1,4 +1,4 @@
-package rbac
+package constants
 
 import "fmt"
 
